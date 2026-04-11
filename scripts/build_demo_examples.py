@@ -77,6 +77,16 @@ MODEL_META = {
             "outputYuanPerMillion": 2.0,
         },
     },
+    "doubao2pro": {
+        "label": "Doubao Seed 2.0 Pro",
+        "apiModel": "volcengine/doubao-seed-2-0-pro",
+        "promptStyle": "short",
+        "supportsReasoningTrace": True,
+        "paperPricing": {
+            "inputYuanPerMillion": 3.2,
+            "outputYuanPerMillion": 16.0,
+        },
+    },
     "oss": {
         "label": "GPT-OSS-120B",
         "apiModel": "qiniu/gpt-oss-120b",
@@ -160,6 +170,7 @@ def main() -> None:
                 "difficulty": direct_doubao.get("difficulty"),
                 "archived": {
                     "doubao": build_model_archive(direct_doubao, trs_doubao),
+                    "doubao2pro": build_model_archive(direct_doubao, trs_doubao),
                     "oss": build_model_archive(direct_oss, trs_oss),
                     "oss20": build_model_archive(direct_oss, trs_oss),
                     "gemini": build_model_archive(direct_gemini, trs_gemini),

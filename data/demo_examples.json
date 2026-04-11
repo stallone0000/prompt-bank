@@ -14,6 +14,16 @@
         "outputYuanPerMillion": 2.0
       }
     },
+    "doubao2pro": {
+      "label": "Doubao Seed 2.0 Pro",
+      "apiModel": "volcengine/doubao-seed-2-0-pro",
+      "promptStyle": "short",
+      "supportsReasoningTrace": true,
+      "paperPricing": {
+        "inputYuanPerMillion": 3.2,
+        "outputYuanPerMillion": 16.0
+      }
+    },
     "oss": {
       "label": "GPT-OSS-120B",
       "apiModel": "qiniu/gpt-oss-120b",
@@ -58,6 +68,16 @@
       "difficulty": 5.0,
       "archived": {
         "doubao": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "skill_text": "1. When a problem involves multiple internal bisectors and a parallel constraint (e.g., $EF \\parallel AC$), use the Angle Bisector Theorem to establish ratios between segments. If the parallel line connects points on the sides, the resulting proportionality ($BE/BA = BF/BC$) often forces a symmetry condition, such as the triangle being isosceles or a cevian being a median.\n2. When a cevian (like $BD$) splits a triangle into two, and bisectors are drawn within those sub-triangles, immediately check if the cevian is perpendicular to the base. If the ratios from the Angle Bisector Theorem ($AD/BD$ and $CD/BD$) must be equal due to external constraints, then $AD = CD$, implying the cevian is both a median and an altitude.\n3. In geometry problems involving \"angle chasing\" with parallel lines, relate the angles of the smaller similar triangle (e.g., $\\triangle BEF$) to the base angles of the larger triangle ($\\triangle ABC$). Use the property that corresponding angles are equal to substitute unknown variables.\n4. If synthetic angle chasing becomes circular, apply Coordinate Geometry by placing the most constrained point (like the foot of an altitude) at the origin. This allows for the use of the dot product formula $\\cos \\theta = \\frac{\\vec{u} \\cdot \\vec{v}}{|\\vec{u}||\\vec{v}|}$ to find specific angle measures.\n5. Be cautious of the \"bisector\" definition; always clarify which angle is being bisected. If the problem states \"bisector $DE$ in triangle $ABD$,\" and $E$ lies on $AB$, it typically refers to the bisector of the angle at the vertex not on that side (angle $D$).",
+            "skill_score": 149.985
+          }
+        },
+        "doubao2pro": {
           "direct": {
             "verification": "CORRECT"
           },
@@ -120,6 +140,16 @@
             "skill_score": 124.951
           }
         },
+        "doubao2pro": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "skill_text": "1. When encountering a limit of a stochastic process, first identify the \"natural scaling\" of the variable (e.g., a symmetric random walk $S_N$ typically scales as $\\sqrt{N}$). If the problem asks for a limit with a different scaling factor (like $N$), the result will likely converge to a degenerate value (0 or 1) due to the Law of Large Numbers or Large Deviation Principle.\n2. To bound the maximum of a symmetric random walk, adopt the Reflection Principle. This allows you to relate the probability of the maximum exceeding a threshold to the probability of the final position exceeding that same threshold (specifically, $\\text{Pr}(\\max S_i \\geq k) \\approx 2\\text{Pr}(S_N \\geq k)$). Be cautious of the discrete nature of the walk; exact equalities often require $k$ to be an integer.\n3. When a threshold is significantly larger than the standard deviation (e.g., $O(N)$ vs $O(\\sqrt{N})$), use the Large Deviation Principle (LDP) to show that the tail probability decays exponentially. The rate function $I(x)$ for a Bernoulli walk is $\\frac{1}{2}[(1+x)\\log(1+x) + (1-x)\\log(1-x)]$.\n4. For problems involving the maximum absolute value of a path, treat the event as the intersection of the walk staying below an upper barrier and above a lower barrier. In the limit of large $N$ and linear scaling, the probability of hitting either barrier is dominated by the single-tail probability, as the probability of hitting both is of a higher order of exponential decay.\n5. If a sequence of probabilities $\\text{Pr}(A_N)$ converges to 1, the only valid constant upper bound for the limit is 1. Always check if the problem implies a \"non-trivial\" bound by verifying if the scaling factor in the denominator was intended to be the standard deviation ($\\sqrt{N}$) instead of the sample size ($N$).",
+            "skill_score": 124.951
+          }
+        },
         "oss": {
           "direct": {
             "verification": "CORRECT"
@@ -164,6 +194,16 @@
       "difficulty": 7.0,
       "archived": {
         "doubao": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "skill_text": "1. When encountering [Limits of Composite Functions as x → 0], adopt [Recursive Asymptotic Substitution] because nested infinitesimals like $\\arctan(\\log(1+u))$ can be simplified layer-by-layer using standard equivalences (e.g., $\\log(1+u) \\sim u$). Be cautious of [Inner Functions that do not approach 0], as the equivalence $f(g(x)) \\sim g(x)$ only holds if $g(x) \\to 0$.\n2. When encountering [Products of Trigonometric or Exponential Terms], adopt [Leading-Order Power Conversion] because converting every factor into the form $Ax^k$ allows the limit to be solved through simple exponent arithmetic. Be cautious of [Terms approaching non-zero constants], such as $(1-\\sin^2 x)$; these should be evaluated to their limit value immediately to avoid unnecessary Taylor expansion.\n3. When encountering [Powers of Infinitesimals] like $\\sin^n(x^m)$, adopt the [Exponent Multiplication Rule] $(x^m)^n = x^{mn}$ because it quickly reduces the complexity of the numerator/denominator. Be cautious of [Summation terms within the base], where the lowest power must be identified before applying the exponent.\n4. When encountering [Complex Quotients at a Limit Point], adopt [Dominant Term Comparison] by calculating the total power of $x$ in the numerator ($P_n$) and denominator ($P_d$). If $P_n > P_d$, the limit is 0; if $P_n = P_d$, the limit is the ratio of coefficients. Be cautious of [Cancellation of leading terms] in sums, which requires higher-order Taylor expansions.\n5. When encountering [Radicals and Fractional Powers] in a limit, adopt [Fractional Exponent Standardization] because it prevents errors during the combination of terms (e.g., $x^{1/2} \\cdot x^{9/4}$). Be cautious of [Arithmetic errors in fraction addition], which are the most common cause of incorrect power determination.",
+            "skill_score": 23.523
+          }
+        },
+        "doubao2pro": {
           "direct": {
             "verification": "CORRECT"
           },
@@ -226,6 +266,16 @@
             "skill_score": 32.492
           }
         },
+        "doubao2pro": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "skill_text": "1. When evaluating $\\lim_{r \\to \\infty} \\int e^{-r f(x)} dx$, identify the global minima of $f(x)$. The integral's behavior is dominated by the neighborhood of these minima (Laplace's Method). If the minimum value $f(x_{min}) = 0$, the integral typically scales as $O(r^{-1/k})$ where $k$ is the order of the first non-zero derivative at the minimum.\n2. Apply the Dominated Convergence Theorem (DCT) for a quick qualitative check. If the integrand $e^{-r f(x)}$ is bounded by an integrable function $g(x)$ (e.g., $g(x)=1$ on a finite interval) and $f(x) > 0$ almost everywhere, the limit is the integral of the pointwise limit (usually 0).\n3. Use local Taylor expansions to simplify the integrand near the peak. For quadratic minima ($f''(x) > 0$), the integral behaves like a Gaussian integral $\\int e^{-r \\frac{f''(x_0)}{2}(x-x_0)^2} dx$, which yields a factor of $\\sqrt{2\\pi / (r f''(x_0))}$.\n4. To rigorously bound the integral, split the domain into a \"peak zone\" of width $\\delta$ and a \"decay zone.\" In the decay zone, the integrand is bounded by $e^{-r \\cdot \\min(f)}$, which vanishes exponentially. In the peak zone, the integral is bounded by the width $2\\delta$ times the maximum value (usually 1).\n5. When the exponent involves trigonometric functions like $\\cos^2(\\theta)$, use symmetry and periodic shifts (e.g., $t = \\theta - \\pi/2$) to center the peak at the origin, facilitating the use of standard approximations like $\\sin(t) \\approx t$.",
+            "skill_score": 32.492
+          }
+        },
         "oss": {
           "direct": {
             "verification": "CORRECT"
@@ -270,6 +320,16 @@
       "difficulty": 6.0,
       "archived": {
         "doubao": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "skill_text": "1. When encountering a Laurent polynomial (an expression with both positive and negative powers of $x$), adopt the strategy of factoring out the lowest power to transform it into a standard polynomial divided by a monomial ($P(x)^n / x^k$). This shifts the problem to finding the range of exponents in a standard polynomial.\n2. When determining the number of distinct terms in $P(x)^n$, first identify the minimum and maximum possible exponents ($n \\cdot \\min\\_exp$ and $n \\cdot \\max\\_exp$). If the base polynomial $P(x)$ contains a contiguous sequence of exponents, the resulting expansion $P(x)^n$ will also likely have a contiguous sequence of exponents.\n3. To verify if a polynomial $P(x)^n$ has \"gaps\" in its exponents, use induction or check small cases (e.g., $n=2, 3$). Be cautious of \"sparse\" polynomials like $(x^2 + 1)^n$, which only contain even powers, as these will always have gaps regardless of the power $n$.\n4. When multiplying two polynomials $A(x)$ and $B(x)$ that both have contiguous exponent ranges $[0, a]$ and $[0, b]$, the product $A(x)B(x)$ will have a contiguous range $[0, a+b]$ unless specific coefficient cancellations occur. Reasoning: The existence of a term $x^k$ in the product is guaranteed if $k$ can be partitioned into $s+t$ where $s \\in \\text{exponents}(A)$ and $t \\in \\text{exponents}(B)$.\n5. When faced with a multinomial expansion $(x_1 + x_2 + ... + x_m)^n$, treat it as a problem of finding the set of all possible values of the linear combination of exponents $\\sum c_i a_i$ subject to $\\sum a_i = n$. If the coefficients $c_i$ allow for a step size of 1, the range is likely a complete interval of integers.",
+            "skill_score": 60.084
+          }
+        },
+        "doubao2pro": {
           "direct": {
             "verification": "CORRECT"
           },

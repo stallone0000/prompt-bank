@@ -96,6 +96,15 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         output_price_yuan_per_million=2.0,
         supports_reasoning_trace=True,
     ),
+    "doubao2pro": ModelConfig(
+        model_id="doubao2pro",
+        label="Doubao Seed 2.0 Pro",
+        api_model="volcengine/doubao-seed-2-0-pro",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=3.2,
+        output_price_yuan_per_million=16.0,
+        supports_reasoning_trace=True,
+    ),
     "oss": ModelConfig(
         model_id="oss",
         label="GPT-OSS-120B",
@@ -382,6 +391,14 @@ def build_result(
     }
 
 
+def extract_reasoning_text(message: Dict[str, Any]) -> str:
+    return message.get("reasoning_content", "") or ""
+
+
+def extract_answer_text(message: Dict[str, Any]) -> str:
+    return message.get("content", "") or ""
+
+
 def compute_live_summary(direct: Dict[str, Any], trs: Dict[str, Any]) -> Dict[str, Any]:
     completion_saved = None
     if direct["completion_tokens"] is not None and trs["completion_tokens"] is not None:
@@ -446,8 +463,8 @@ def call_model(question_text: str, prompt_text: str, config: ModelConfig, refere
     return build_result(
         question_text=question_text,
         config=config,
-        reasoning_text=message.get("reasoning_content", "") or "",
-        answer_text=message.get("content", "") or "",
+        reasoning_text=extract_reasoning_text(message),
+        answer_text=extract_answer_text(message),
         usage=usage,
         reference_answer=reference_answer,
     )
@@ -487,8 +504,8 @@ def stream_model(
                         usage = chunk["usage"]
                     choices = chunk.get("choices", [])
                     delta = choices[0].get("delta", {}) if choices else {}
-                    reasoning_piece = delta.get("reasoning_content", "") or ""
-                    answer_piece = delta.get("content", "") or ""
+                    reasoning_piece = extract_reasoning_text(delta)
+                    answer_piece = extract_answer_text(delta)
                     if reasoning_piece:
                         reasoning_parts.append(reasoning_piece)
                         on_delta("reasoning", reasoning_piece)
