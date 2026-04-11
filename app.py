@@ -21,6 +21,10 @@ APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 DATA_PATH = APP_DIR / "data" / "demo_examples.json"
 
+PROMPT_DIRECT = """You are a helpful and harmless assistant.
+Let's think step by step:
+{PROBLEM}"""
+
 PROMPT_SHORT = """You are a helpful and harmless assistant.
 You may be given an optional Solving Hints section. Use it only if it is relevant to the problem; otherwise ignore it completely.
 [Solving Hints]
@@ -175,6 +179,10 @@ def compute_cost_yuan(prompt_tokens: int, completion_tokens: int, config: ModelC
 
 def build_prompt(template: str, question: str, skill_text: str) -> str:
     return template.replace("{SOLVING_HINTS}", skill_text).replace("{PROBLEM}", question)
+
+
+def build_direct_prompt(question: str) -> str:
+    return PROMPT_DIRECT.replace("{PROBLEM}", question)
 
 
 def get_api_key() -> str:
@@ -535,7 +543,7 @@ def serialize_live_comparison(example: Dict[str, Any], config: ModelConfig) -> D
     question = example["question"]
     reference_answer = example["answer"]
     skill_text = example["archived"][config.model_id]["trs"]["skill_text"]
-    direct_prompt = build_prompt(config.prompt_template, question, "")
+    direct_prompt = build_direct_prompt(question)
     trs_prompt = build_prompt(config.prompt_template, question, skill_text)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -627,7 +635,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
         archived = example["archived"][config.model_id]
         skill_text = archived["trs"]["skill_text"]
         prompts = {
-            "direct": build_prompt(config.prompt_template, question, ""),
+            "direct": build_direct_prompt(question),
             "trs": build_prompt(config.prompt_template, question, skill_text),
         }
 
