@@ -21,8 +21,9 @@ const nodes = {
   questionSubtitle: document.getElementById("questionSubtitle"),
   questionText: document.getElementById("questionText"),
   referenceAnswer: document.getElementById("referenceAnswer"),
-  archivedReduction: document.getElementById("archivedReduction"),
-  archivedTokensSaved: document.getElementById("archivedTokensSaved"),
+  selectionRule: document.getElementById("selectionRule"),
+  tokenFields: document.getElementById("tokenFields"),
+  verifierModel: document.getElementById("verifierModel"),
   archivedSkillScore: document.getElementById("archivedSkillScore"),
   skillCard: document.getElementById("skillCard"),
   runStatus: document.getElementById("runStatus"),
@@ -46,6 +47,18 @@ function formatReductionPercent(value) {
 
 function formatYuan(value) {
   return `¥${value.toFixed(6)}`;
+}
+
+function formatMaybeNumber(value) {
+  return Number.isFinite(value) ? formatNumber(value) : "N/A";
+}
+
+function formatMaybeReductionPercent(value) {
+  return Number.isFinite(value) ? formatReductionPercent(value) : "N/A";
+}
+
+function formatMaybeYuan(value) {
+  return Number.isFinite(value) ? formatYuan(value) : "N/A";
 }
 
 function typesetMath(targets = []) {
@@ -106,8 +119,9 @@ function renderSelection() {
   nodes.questionSubtitle.textContent = example.subtitle;
   nodes.questionText.textContent = example.question;
   nodes.referenceAnswer.textContent = example.answer;
-  nodes.archivedReduction.textContent = formatReductionPercent(archived.summary.estimatedReasoningReductionPct);
-  nodes.archivedTokensSaved.textContent = formatNumber(archived.summary.estimatedTotalTokensSaved);
+  nodes.selectionRule.textContent = state.payload.selectionRule || "Long-CoT rebuttal curation";
+  nodes.tokenFields.textContent = (state.payload.tokenUsageFields || []).join(" • ");
+  nodes.verifierModel.textContent = state.payload.verifier?.model || "openai/gpt-5-mini";
   nodes.archivedSkillScore.textContent = archived.trs.skill_score.toFixed(3);
   nodes.skillCard.textContent = archived.trs.skill_text;
   typesetMath([nodes.questionText, nodes.referenceAnswer, nodes.skillCard]);
@@ -165,23 +179,24 @@ function metricRow(label, value, tone = "") {
 
 function renderLiveMetrics(container, result) {
   const correctness = result.correctness || {};
-  const reasoningLabel =
-    result.reasoning_token_source === "api_reasoning_tokens"
-      ? "CoT tokens (API)"
-      : result.reasoning_token_source === "api_completion_minus_estimated_answer"
-        ? "CoT tokens (API-derived)"
-        : "CoT tokens (estimated)";
   container.innerHTML = "";
   container.append(
-    metricRow("Prompt tokens", formatNumber(result.prompt_tokens)),
-    metricRow("Completion tokens", formatNumber(result.completion_tokens)),
-    metricRow("Total tokens", formatNumber(result.total_tokens)),
-    metricRow(reasoningLabel, formatNumber(result.reasoning_tokens)),
-    metricRow("Paper-priced cost", formatYuan(result.cost_yuan)),
+    metricRow("Prompt tokens (API)", formatMaybeNumber(result.prompt_tokens)),
+    metricRow("Completion tokens (API)", formatMaybeNumber(result.completion_tokens)),
+    metricRow("Total tokens (API)", formatMaybeNumber(result.total_tokens)),
+    metricRow(
+      "Reasoning tokens field",
+      Number.isFinite(result.reported_reasoning_tokens) ? formatNumber(result.reported_reasoning_tokens) : "Not returned",
+      Number.isFinite(result.reported_reasoning_tokens) && result.reported_reasoning_tokens > 0 ? "" : "muted"
+    ),
+    metricRow("Paper-priced cost", formatMaybeYuan(result.cost_yuan)),
     metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
-    metricRow("Extracted answer", correctness.extracted_answer || "—", "muted"),
-    metricRow("Heuristic verdict", correctness.label || "Heuristic Match Unclear", verdictTone(correctness.status))
+    metricRow("Verifier model", correctness.verifier_model || "—", "muted"),
+    metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status))
   );
+  if (result.reasoning_token_note) {
+    container.append(metricRow("Reasoning token note", result.reasoning_token_note, "muted"));
+  }
 }
 
 function verdictTone(status) {
@@ -200,19 +215,19 @@ function renderLiveSummary(summary) {
   const cards = [
     {
       label: "CoT Tokens Saved",
-      value: formatNumber(summary.estimated_reasoning_tokens_saved),
+      value: formatMaybeNumber(summary.reasoning_tokens_saved),
     },
     {
       label: "CoT Reduction",
-      value: formatReductionPercent(summary.estimated_reasoning_reduction_pct),
+      value: formatMaybeReductionPercent(summary.reasoning_reduction_pct),
     },
     {
       label: "Total Tokens Saved",
-      value: formatNumber(summary.total_tokens_saved),
+      value: formatMaybeNumber(summary.total_tokens_saved),
     },
     {
       label: "Paper-Priced Cost Saved",
-      value: formatYuan(summary.cost_saved_yuan),
+      value: formatMaybeYuan(summary.cost_saved_yuan),
     },
   ];
   cards.forEach((card) => {

@@ -111,63 +111,15 @@ def load_jsonl(path: Path) -> Dict[str, Dict]:
     return records
 
 
-def estimate_tokens(text: str) -> int:
-    if not text:
-        return 0
-    return max(1, len(text) // 2)
-
-
 def build_model_archive(direct_item: Dict, trs_item: Dict) -> Dict:
-    direct_answer_est = estimate_tokens(direct_item.get("model_response", ""))
-    trs_answer_est = estimate_tokens(trs_item.get("heuristic_model_response", ""))
-    direct_completion = int(direct_item.get("completion_tokens") or 0)
-    direct_prompt = int(direct_item.get("prompt_tokens") or 0)
-    trs_completion = int(trs_item.get("heuristic_completion_tokens") or 0)
-    trs_prompt = int(trs_item.get("heuristic_prompt_tokens") or 0)
-
-    if direct_completion:
-        direct_answer_tokens = min(direct_completion, direct_answer_est)
-        direct_reasoning_tokens = max(0, direct_completion - direct_answer_tokens)
-        direct_total = direct_prompt + direct_completion if direct_prompt else direct_completion
-    else:
-        direct_reasoning_tokens = estimate_tokens(direct_item.get("model_think", ""))
-        direct_answer_tokens = direct_answer_est
-        direct_total = direct_reasoning_tokens + direct_answer_tokens
-
-    if trs_completion:
-        trs_answer_tokens = min(trs_completion, trs_answer_est)
-        trs_reasoning_tokens = max(0, trs_completion - trs_answer_tokens)
-        trs_total = trs_prompt + trs_completion if trs_prompt else trs_completion
-    else:
-        trs_reasoning_tokens = estimate_tokens(trs_item.get("heuristic_model_think", ""))
-        trs_answer_tokens = trs_answer_est
-        trs_total = trs_reasoning_tokens + trs_answer_tokens
-
-    reasoning_saved = direct_reasoning_tokens - trs_reasoning_tokens
-    total_saved = direct_total - trs_total
-    reasoning_reduction_pct = 0.0
-    if direct_reasoning_tokens > 0:
-        reasoning_reduction_pct = round(reasoning_saved / direct_reasoning_tokens * 100, 2)
-
     return {
         "direct": {
             "verification": direct_item.get("gpt_verify", "UNKNOWN"),
-            "estimatedReasoningTokens": direct_reasoning_tokens,
-            "estimatedAnswerTokens": direct_answer_tokens,
-            "estimatedTotalTokens": direct_total,
         },
         "trs": {
             "verification": trs_item.get("heuristic_gpt_verify", "UNKNOWN"),
-            "estimatedReasoningTokens": trs_reasoning_tokens,
-            "estimatedAnswerTokens": trs_answer_tokens,
-            "estimatedTotalTokens": trs_total,
             "skill_text": trs_item.get("heuristic_used", ""),
             "skill_score": round(float(trs_item.get("heuristic_score", 0.0)), 3),
-        },
-        "summary": {
-            "estimatedReasoningTokensSaved": reasoning_saved,
-            "estimatedTotalTokensSaved": total_saved,
-            "estimatedReasoningReductionPct": reasoning_reduction_pct,
         },
     }
 
@@ -208,7 +160,7 @@ def main() -> None:
         "title": "TRS DeepMath Live Demo",
         "dataset": "DeepMath-103K",
         "scope": "Curated DeepMath examples from the ACL rebuttal / final paper workflow. Live inference compares the direct prompt against the archived full-library TRS skill card for the same example and model family.",
-        "note": "Archived savings are estimated from stored reasoning traces. Live runs use paper-aligned prompt families and compute token/cost stats from the API response.",
+        "note": "Archived data is used only to curate examples and retrieve the archived TRS skill card. Live runs use the current API response for token accounting and the original verifier prompt for correctness.",
         "models": MODEL_META,
         "examples": examples,
         "sources": {key: str(path) for key, path in FILES.items()},

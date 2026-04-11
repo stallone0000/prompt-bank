@@ -38,7 +38,8 @@
             live direct-vs-TRS comparison. The page keeps the 360 API key on
             the server side while exposing the retrieved skill card, the live
             reasoning trace when the API exposes it, the final answer stream,
-            correctness against the reference answer, and the token/cost deltas.
+            correctness from the original DeepMath verifier prompt, and live
+            token/cost deltas computed only from the current API usage fields.
           </p>
         </div>
         <div class="hero-stats" id="heroStats">
@@ -61,7 +62,7 @@
         <aside class="examples-panel">
           <div class="panel-heading">
             <h2>Showcase Problems</h2>
-            <p>Select an example from the rebuttal / paper runs.</p>
+            <p>Select an example curated from the long-CoT rebuttal runs.</p>
           </div>
           <div id="exampleList" class="example-list"></div>
         </aside>
@@ -88,12 +89,16 @@
 
           <section class="summary-grid">
             <div class="summary-card warm">
-              <span>Archived CoT Reduction</span>
-              <strong id="archivedReduction">-</strong>
+              <span>Selection Rule</span>
+              <strong id="selectionRule">-</strong>
             </div>
             <div class="summary-card">
-              <span>Archived Total Tokens Saved</span>
-              <strong id="archivedTokensSaved">-</strong>
+              <span>Live Token Fields</span>
+              <strong id="tokenFields">-</strong>
+            </div>
+            <div class="summary-card">
+              <span>Verifier Model</span>
+              <strong id="verifierModel">-</strong>
             </div>
             <div class="summary-card">
               <span>Retrieved Skill Score</span>
@@ -106,7 +111,9 @@
               <h3>Retrieved Skill Card</h3>
               <p>
                 This is the archived full-library TRS skill card used as the
-                prefix for the live TRS run.
+                prefix for the live TRS run. The score comes from the archived
+                retrieval run; all token and correctness metrics below come from
+                the current live API calls.
               </p>
             </div>
             <pre id="skillCard" class="skill-card"></pre>
