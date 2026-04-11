@@ -8,6 +8,10 @@ const state = {
     direct: false,
     trs: false,
   },
+  laneAttempts: {
+    direct: 1,
+    trs: 1,
+  },
   streamError: null,
 };
 
@@ -158,6 +162,19 @@ function resetLanePanels() {
   });
 }
 
+function seedLanePlaceholders(lane, retry = false) {
+  const laneNode = laneNodes(lane);
+  const answerPlaceholder = retry
+    ? "(Retrying after a transient API error...)"
+    : "(Waiting for the full response...)";
+  laneNode.answer.textContent = answerPlaceholder;
+  laneNode.reasoning.textContent = state.activeModel?.showsReasoningTrace
+    ? retry
+      ? "(Retrying. The reasoning trace will restart if the model returns one.)"
+      : "(Waiting for the reasoning trace...)"
+    : "(This model does not return a separate reasoning trace.)";
+}
+
 function clearLiveResults() {
   nodes.liveSummary.classList.add("hidden");
   nodes.liveSummary.innerHTML = "";
@@ -181,22 +198,14 @@ function renderLiveMetrics(container, result) {
   const correctness = result.correctness || {};
   container.innerHTML = "";
   container.append(
-    metricRow("Prompt tokens (API)", formatMaybeNumber(result.prompt_tokens)),
-    metricRow("Completion tokens (API)", formatMaybeNumber(result.completion_tokens)),
-    metricRow("Total tokens (API)", formatMaybeNumber(result.total_tokens)),
-    metricRow(
-      "Reasoning tokens field",
-      Number.isFinite(result.reported_reasoning_tokens) ? formatNumber(result.reported_reasoning_tokens) : "Not returned",
-      Number.isFinite(result.reported_reasoning_tokens) && result.reported_reasoning_tokens > 0 ? "" : "muted"
-    ),
+    metricRow("Prompt tokens", formatMaybeNumber(result.prompt_tokens)),
+    metricRow("Completion tokens (CoT + response)", formatMaybeNumber(result.completion_tokens)),
+    metricRow("Total tokens", formatMaybeNumber(result.total_tokens)),
     metricRow("Paper-priced cost", formatMaybeYuan(result.cost_yuan)),
     metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
     metricRow("Verifier model", correctness.verifier_model || "—", "muted"),
     metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status))
   );
-  if (result.reasoning_token_note) {
-    container.append(metricRow("Reasoning token note", result.reasoning_token_note, "muted"));
-  }
 }
 
 function verdictTone(status) {
@@ -214,12 +223,12 @@ function renderLiveSummary(summary) {
   nodes.liveSummary.innerHTML = "";
   const cards = [
     {
-      label: "CoT Tokens Saved",
-      value: formatMaybeNumber(summary.reasoning_tokens_saved),
+      label: "Completion Tokens Saved",
+      value: formatMaybeNumber(summary.completion_tokens_saved),
     },
     {
-      label: "CoT Reduction",
-      value: formatMaybeReductionPercent(summary.reasoning_reduction_pct),
+      label: "Completion Reduction",
+      value: formatMaybeReductionPercent(summary.completion_reduction_pct),
     },
     {
       label: "Total Tokens Saved",
@@ -249,21 +258,20 @@ function openTracePanels() {
 }
 
 function seedReasoningPlaceholders() {
-  if (state.activeModel?.showsReasoningTrace) {
-    if (state.activeModel?.fallbackReasoningFromContent) {
-      nodes.directAnswer.textContent = "(Extracting final answer from the model output...)";
-      nodes.trsAnswer.textContent = "(Extracting final answer from the model output...)";
-    }
-    return;
-  }
-  const note = "(This model does not expose a separate reasoning trace on the current 360 API route.)";
-  nodes.directReasoning.textContent = note;
-  nodes.trsReasoning.textContent = note;
+  seedLanePlaceholders("direct");
+  seedLanePlaceholders("trs");
 }
 
 function updateRunStatus() {
   const doneCount = Object.values(state.streamProgress).filter(Boolean).length;
   if (!state.running) {
+    return;
+  }
+  const retrying = Object.entries(state.laneAttempts)
+    .filter(([lane, attempt]) => attempt > 1 && !state.streamProgress[lane])
+    .map(([lane, attempt]) => `${lane === "direct" ? "Direct" : "TRS"} attempt ${attempt}`);
+  if (retrying.length) {
+    nodes.runStatus.textContent = `Retrying ${retrying.join(" and ")} after a transient upstream error.`;
     return;
   }
   if (doneCount === 0) {
@@ -286,8 +294,8 @@ function finalizeLaneResult(lane, result) {
     result.reasoning_text ||
     (state.activeModel?.showsReasoningTrace
       ? "(The API did not return a separate reasoning trace.)"
-      : "(This model does not expose a separate reasoning trace on the current 360 API route.)");
-  laneNode.answer.textContent = result.answer_text || "(No final answer returned.)";
+      : "(This model does not return a separate reasoning trace.)");
+  laneNode.answer.textContent = result.answer_text || "(No response returned.)";
   setLaneStreaming(lane, false);
   typesetMath([laneNode.reasoning, laneNode.answer]);
 }
@@ -295,11 +303,14 @@ function finalizeLaneResult(lane, result) {
 function appendLaneDelta(lane, kind, text) {
   const laneNode = laneNodes(lane);
   if (kind === "reasoning") {
-    if (laneNode.reasoning.textContent.startsWith("(This model does not expose")) {
+    if (laneNode.reasoning.textContent.startsWith("(")) {
       laneNode.reasoning.textContent = "";
     }
     laneNode.reasoning.textContent += text;
     return;
+  }
+  if (laneNode.answer.textContent.startsWith("(")) {
+    laneNode.answer.textContent = "";
   }
   laneNode.answer.textContent += text;
 }
@@ -313,11 +324,20 @@ function handleStreamEvent(eventName, payload) {
       return false;
     case "lane_status":
       return false;
+    case "lane_retry":
+      state.laneAttempts[payload.lane] = payload.attempt;
+      const retryLaneNode = laneNodes(payload.lane);
+      retryLaneNode.metrics.innerHTML = "";
+      seedLanePlaceholders(payload.lane, true);
+      setLaneStreaming(payload.lane, true);
+      updateRunStatus();
+      return false;
     case "lane_delta":
       appendLaneDelta(payload.lane, payload.kind, payload.text);
       return false;
     case "lane_result":
       state.streamProgress[payload.lane] = true;
+      state.laneAttempts[payload.lane] = Math.max(state.laneAttempts[payload.lane], 1);
       finalizeLaneResult(payload.lane, payload.result);
       updateRunStatus();
       return false;
@@ -391,6 +411,7 @@ async function runComparison() {
   state.running = true;
   state.streamError = null;
   state.streamProgress = { direct: false, trs: false };
+  state.laneAttempts = { direct: 1, trs: 1 };
   state.activeModel = state.payload.models[state.modelId];
   nodes.runButton.disabled = true;
   nodes.runButton.textContent = "Streaming...";

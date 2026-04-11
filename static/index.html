@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TRS DeepMath Live Demo</title>
+    <title>Thinking with Reasoning Skills: Fewer Tokens, More Accuracy</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
@@ -31,28 +31,27 @@
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">ACL Demo • DeepMath-Only</p>
-          <h1>TRS shows the model a reusable skill before it starts thinking.</h1>
+          <p class="eyebrow">DeepMath Live Demo</p>
+          <h1>Thinking with Reasoning Skills: Fewer Tokens, More Accuracy</h1>
           <p class="hero-text">
-            Pick one DeepMath example, switch between model families, and run a
-            live direct-vs-TRS comparison. The page keeps the 360 API key on
-            the server side while exposing the retrieved skill card, the live
-            reasoning trace when the API exposes it, the final answer stream,
-            correctness from the original DeepMath verifier prompt, and live
-            token/cost deltas computed only from the current API usage fields.
+            Select one DeepMath problem, switch models, and run a live
+            direct-versus-TRS comparison. The page shows the retrieved skill,
+            the full reasoning trace when the model exposes one, the full
+            response stream, verifier-based correctness, and live token and
+            cost deltas from the current API usage fields.
           </p>
         </div>
         <div class="hero-stats" id="heroStats">
           <div class="hero-card">
             <span>Dataset</span>
-            <strong>DeepMath-103K</strong>
+            <strong>DeepMath</strong>
+          </div>
+          <div class="hero-card">
+            <span>Scope</span>
+            <strong>Curated Long-CoT Cases</strong>
           </div>
           <div class="hero-card">
             <span>Mode</span>
-            <strong>Curated Examples</strong>
-          </div>
-          <div class="hero-card">
-            <span>Comparison</span>
             <strong>Direct vs TRS</strong>
           </div>
         </div>
@@ -61,8 +60,8 @@
       <main class="layout">
         <aside class="examples-panel">
           <div class="panel-heading">
-            <h2>Showcase Problems</h2>
-            <p>Select an example curated from the long-CoT rebuttal runs.</p>
+            <h2>Selected Problems</h2>
+            <p>Examples with very long original direct reasoning and strong TRS compression.</p>
           </div>
           <div id="exampleList" class="example-list"></div>
         </aside>
@@ -89,7 +88,7 @@
 
           <section class="summary-grid">
             <div class="summary-card warm">
-              <span>Selection Rule</span>
+              <span>Curation</span>
               <strong id="selectionRule">-</strong>
             </div>
             <div class="summary-card">
@@ -110,10 +109,9 @@
             <div class="section-heading">
               <h3>Retrieved Skill Card</h3>
               <p>
-                This is the archived full-library TRS skill card used as the
-                prefix for the live TRS run. The score comes from the archived
-                retrieval run; all token and correctness metrics below come from
-                the current live API calls.
+                This archived full-library skill card is prefixed to the live
+                TRS run. The retrieval score is archived; all token and
+                correctness metrics below come from the current live calls.
               </p>
             </div>
             <pre id="skillCard" class="skill-card"></pre>
@@ -123,8 +121,9 @@
             <div class="section-heading">
               <h3>Live Comparison</h3>
               <p id="runStatus" aria-live="polite">
-                No live run yet. Press the button to query the model twice: once
-                with no skill prefix, and once with the archived TRS skill card.
+                No live run yet. Press the button to query the model twice:
+                once with no skill prefix, and once with the archived TRS skill
+                card.
               </p>
             </div>
 
@@ -142,7 +141,7 @@
                   <pre id="directReasoning"></pre>
                 </details>
                 <details class="trace-panel">
-                  <summary>Final answer</summary>
+                  <summary>Full response</summary>
                   <pre id="directAnswer"></pre>
                 </details>
               </article>
@@ -158,7 +157,7 @@
                   <pre id="trsReasoning"></pre>
                 </details>
                 <details class="trace-panel">
-                  <summary>Final answer</summary>
+                  <summary>Full response</summary>
                   <pre id="trsAnswer"></pre>
                 </details>
               </article>

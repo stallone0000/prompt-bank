@@ -4,9 +4,9 @@ from __future__ import annotations
 import json
 import os
 import queue
-import re
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -45,17 +45,10 @@ You may be given an optional Solving Hints section. Use it only if it is relevan
 If you use the solving hints, please try to reduce the number of tokens used. Problem:
 {PROBLEM}"""
 
-OPTION_RE = re.compile(r"\b([A-E])\b", re.IGNORECASE)
-NUMERIC_RE = re.compile(r"[-+]?(?:\d+(?:\.\d+)?|\d+/\d+)")
-BOXED_RE = re.compile(r"\\boxed\s*{([^{}]+)}")
-FINAL_ANSWER_PATTERNS = [
-    re.compile(r"(?is)(?:final answer|the answer is|answer is|answer|答案是|最终答案是|答案为|最终答案为)\s*[:：]?\s*(.+?)\s*$"),
-]
 TOKEN_USAGE_FIELDS = [
     "usage.prompt_tokens",
     "usage.completion_tokens",
     "usage.total_tokens",
-    "usage.completion_tokens_details.reasoning_tokens",
 ]
 VERIFY_PROMPT_TEMPLATE = """
 You are a answer checker.
@@ -91,7 +84,6 @@ class ModelConfig:
     input_price_yuan_per_million: float
     output_price_yuan_per_million: float
     supports_reasoning_trace: bool
-    fallback_reasoning_from_content: bool
 
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
@@ -103,7 +95,6 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=0.8,
         output_price_yuan_per_million=2.0,
         supports_reasoning_trace=True,
-        fallback_reasoning_from_content=False,
     ),
     "oss": ModelConfig(
         model_id="oss",
@@ -113,7 +104,6 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=1.08,
         output_price_yuan_per_million=5.4,
         supports_reasoning_trace=False,
-        fallback_reasoning_from_content=True,
     ),
     "gemini": ModelConfig(
         model_id="gemini",
@@ -123,7 +113,6 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=2.52,
         output_price_yuan_per_million=15.12,
         supports_reasoning_trace=False,
-        fallback_reasoning_from_content=False,
     ),
 }
 
@@ -142,8 +131,7 @@ def load_examples_payload() -> Dict[str, Any]:
             "label": config.label,
             "apiModel": config.api_model,
             "supportsReasoningTrace": config.supports_reasoning_trace,
-            "fallbackReasoningFromContent": config.fallback_reasoning_from_content,
-            "showsReasoningTrace": config.supports_reasoning_trace or config.fallback_reasoning_from_content,
+            "showsReasoningTrace": config.supports_reasoning_trace,
             "paperPricing": {
                 "inputYuanPerMillion": config.input_price_yuan_per_million,
                 "outputYuanPerMillion": config.output_price_yuan_per_million,
@@ -232,128 +220,6 @@ def make_api_request(prompt_text: str, config: ModelConfig, stream: bool) -> req
     return build_json_api_request(build_api_payload(prompt_text, config, stream))
 
 
-def strip_boxed(text: str) -> str:
-    previous = None
-    current = text
-    while previous != current:
-        previous = current
-        current = re.sub(r"\\boxed\s*{([^{}]+)}", r"\1", current)
-    return current
-
-
-def clean_answer_text(text: str) -> str:
-    cleaned = strip_boxed(text)
-    for source, target in [
-        ("\\(", ""),
-        ("\\)", ""),
-        ("\\[", ""),
-        ("\\]", ""),
-        ("$", ""),
-        ("**", ""),
-        ("`", ""),
-        ("\u2212", "-"),
-    ]:
-        cleaned = cleaned.replace(source, target)
-    return cleaned.strip()
-
-
-def normalize_answer(text: str) -> str:
-    cleaned = clean_answer_text(text)
-    cleaned = re.sub(
-        r"(?i)(final answer|answer|the answer is|答案是|最终答案是|答案为|最终答案为|所以答案是|因此答案是)\s*[:：]?\s*",
-        " ",
-        cleaned,
-    )
-    cleaned = cleaned.strip(" \n\t\r。．.,;:!！？()[]{}<>")
-    return re.sub(r"\s+", "", cleaned).lower()
-
-
-def extract_option_answer(text: str) -> str:
-    matches = OPTION_RE.findall(clean_answer_text(text).upper())
-    return matches[-1].upper() if matches else ""
-
-
-def extract_numeric_answer(text: str) -> str:
-    matches = NUMERIC_RE.findall(clean_answer_text(text).replace(",", ""))
-    return matches[-1] if matches else ""
-
-
-def evaluate_correctness(answer_text: str, reference_answer: str) -> Dict[str, str]:
-    reference = reference_answer.strip()
-    prediction = answer_text.strip()
-    extracted = ""
-    status = "unverified"
-    label = "Heuristic Match Unclear"
-
-    if not prediction:
-        status = "missing"
-        label = "No Final Answer"
-    elif re.fullmatch(r"[A-E]", reference, re.IGNORECASE):
-        extracted = extract_option_answer(prediction)
-        if extracted:
-            status = "correct" if extracted.upper() == reference.upper() else "incorrect"
-            label = "Correct" if status == "correct" else "Incorrect"
-    elif re.fullmatch(r"[-+]?(?:\d+(?:\.\d+)?|\d+/\d+)", reference):
-        extracted = extract_numeric_answer(prediction)
-        if extracted:
-            status = "correct" if normalize_answer(extracted) == normalize_answer(reference) else "incorrect"
-            label = "Correct" if status == "correct" else "Incorrect"
-    else:
-        extracted = clean_answer_text(prediction)
-        if normalize_answer(extracted):
-            matched = normalize_answer(extracted) == normalize_answer(reference)
-            if not matched:
-                matched = normalize_answer(extracted).endswith(normalize_answer(reference))
-            status = "correct" if matched else "incorrect"
-            label = "Correct" if matched else "Incorrect"
-
-    return {
-        "status": status,
-        "label": label,
-        "reference_answer": reference_answer,
-        "extracted_answer": extracted,
-    }
-
-
-def strip_think_block(text: str) -> str:
-    if isinstance(text, str) and text.startswith("<think>"):
-        parts = text.split("</think>", 1)
-        if len(parts) == 2:
-            return parts[1].strip()
-    return text
-
-
-def extract_display_answer(text: str, reference_answer: str) -> str:
-    candidate = strip_think_block(text or "").strip()
-    if not candidate:
-        return ""
-
-    boxed_matches = BOXED_RE.findall(candidate)
-    if boxed_matches:
-        return clean_answer_text(boxed_matches[-1])
-
-    for pattern in FINAL_ANSWER_PATTERNS:
-        match = pattern.search(candidate)
-        if match:
-            return clean_answer_text(match.group(1))
-
-    reference = reference_answer.strip()
-    if re.fullmatch(r"[A-E]", reference, re.IGNORECASE):
-        option = extract_option_answer(candidate)
-        if option:
-            return option
-    if re.fullmatch(r"[-+]?(?:\d+(?:\.\d+)?|\d+/\d+)", reference):
-        numeric = extract_numeric_answer(candidate)
-        if numeric:
-            return numeric
-
-    cleaned_lines = [clean_answer_text(line) for line in candidate.splitlines()]
-    cleaned_lines = [line for line in cleaned_lines if line]
-    if cleaned_lines:
-        return cleaned_lines[-1]
-    return clean_answer_text(candidate)
-
-
 def parse_usage_int(value: Any) -> int | None:
     if value in (None, ""):
         return None
@@ -372,9 +238,35 @@ def parse_verifier_verdict(content: str) -> str:
     return first_line or "UNKNOWN"
 
 
+def get_max_retries() -> int:
+    try:
+        return max(1, int(os.environ.get("TRS_DEMO_MAX_RETRIES", "5")))
+    except ValueError:
+        return 5
+
+
+def get_timeout_seconds() -> int:
+    try:
+        return max(1, int(os.environ.get("TRS_DEMO_TIMEOUT_SECONDS", "300")))
+    except ValueError:
+        return 300
+
+
+def retry_sleep_seconds(attempt_number: int) -> float:
+    return min(2.0, 0.35 * attempt_number)
+
+
+def format_upstream_error(exc: Exception) -> str:
+    if isinstance(exc, error.HTTPError):
+        detail = exc.read().decode("utf-8", errors="replace")
+        return f"HTTP {exc.code}: {detail}"
+    return str(exc)
+
+
 def verify_answer(question_text: str, reference_answer: str, candidate_answer: str) -> Dict[str, Any]:
     verifier_model = get_verify_model()
-    cleaned_candidate = strip_think_block(candidate_answer or "").strip()
+    cleaned_candidate = (candidate_answer or "").strip()
+    max_retries = get_max_retries()
     if not cleaned_candidate:
         return {
             "status": "missing",
@@ -398,28 +290,35 @@ def verify_answer(question_text: str, reference_answer: str, candidate_answer: s
     }
 
     opener = build_opener()
-    timeout_seconds = int(os.environ.get("TRS_DEMO_TIMEOUT_SECONDS", "300"))
-    try:
-        with opener.open(build_json_api_request(payload), timeout=timeout_seconds) as response:
-            parsed = json.loads(response.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
+    timeout_seconds = get_timeout_seconds()
+    parsed = None
+    last_error = ""
+    for attempt in range(1, max_retries + 1):
+        try:
+            with opener.open(build_json_api_request(payload), timeout=timeout_seconds) as response:
+                parsed = json.loads(response.read().decode("utf-8"))
+            break
+        except Exception as exc:
+            last_error = format_upstream_error(exc)
+            if attempt >= max_retries:
+                return {
+                    "status": "unknown",
+                    "label": "Verifier Error",
+                    "reference_answer": reference_answer,
+                    "verifier_model": verifier_model,
+                    "verdict": "UNKNOWN",
+                    "verifier_response": last_error,
+                }
+            time.sleep(retry_sleep_seconds(attempt))
+
+    if parsed is None:
         return {
             "status": "unknown",
             "label": "Verifier Error",
             "reference_answer": reference_answer,
             "verifier_model": verifier_model,
             "verdict": "UNKNOWN",
-            "verifier_response": detail,
-        }
-    except Exception as exc:
-        return {
-            "status": "unknown",
-            "label": "Verifier Error",
-            "reference_answer": reference_answer,
-            "verifier_model": verifier_model,
-            "verdict": "UNKNOWN",
-            "verifier_response": str(exc),
+            "verifier_response": last_error,
         }
 
     choices = parsed.get("choices", [])
@@ -446,79 +345,38 @@ def verify_answer(question_text: str, reference_answer: str, candidate_answer: s
     }
 
 
-def looks_like_reasoning_trace(text: str) -> bool:
-    cleaned = clean_answer_text(text)
-    if len(cleaned) >= 180:
-        return True
-    return any(marker in text for marker in ["\n\n", "###", "Step ", "Thus", "Therefore", "所以", "因此"])
-
-
 def build_result(
     question_text: str,
-    prompt_text: str,
     config: ModelConfig,
     reasoning_text: str,
     answer_text: str,
     usage: Dict[str, Any],
     reference_answer: str,
 ) -> Dict[str, Any]:
-    raw_answer_text = answer_text
-    display_reasoning_text = reasoning_text
-    display_answer_text = extract_display_answer(raw_answer_text, reference_answer) or raw_answer_text
-    if (
-        not display_reasoning_text
-        and config.fallback_reasoning_from_content
-        and looks_like_reasoning_trace(raw_answer_text)
-    ):
-        display_reasoning_text = raw_answer_text
-        display_answer_text = extract_display_answer(raw_answer_text, reference_answer)
-
     prompt_tokens = parse_usage_int(usage.get("prompt_tokens"))
     completion_tokens = parse_usage_int(usage.get("completion_tokens"))
     total_tokens = parse_usage_int(usage.get("total_tokens"))
-    reported_reasoning_tokens = parse_usage_int((usage.get("completion_tokens_details") or {}).get("reasoning_tokens"))
-    reasoning_tokens = reported_reasoning_tokens if reported_reasoning_tokens and reported_reasoning_tokens > 0 else None
-    answer_tokens = None
-    if completion_tokens is not None and reasoning_tokens is not None:
-        answer_tokens = max(0, completion_tokens - reasoning_tokens)
-
-    reasoning_token_note = ""
-    if reported_reasoning_tokens == 0:
-        if config.fallback_reasoning_from_content and display_reasoning_text:
-            reasoning_token_note = "The API reports 0 reasoning tokens on this route even though the reasoning trace is present in content."
-        elif config.supports_reasoning_trace:
-            reasoning_token_note = "The API returned a reasoning field, but reported 0 reasoning tokens for this answer."
-        else:
-            reasoning_token_note = "This API route does not expose separate reasoning-token counts for this model."
-    elif reported_reasoning_tokens is None:
-        reasoning_token_note = "This API response did not include usage.completion_tokens_details.reasoning_tokens."
-
     cost_yuan = None
     if prompt_tokens is not None and completion_tokens is not None:
         cost_yuan = round(compute_cost_yuan(prompt_tokens, completion_tokens, config), 6)
 
-    correctness = verify_answer(question_text, reference_answer, raw_answer_text or reasoning_text)
+    correctness = verify_answer(question_text, reference_answer, answer_text)
 
     return {
-        "reasoning_text": display_reasoning_text,
-        "answer_text": display_answer_text,
-        "raw_answer_text": raw_answer_text,
+        "reasoning_text": reasoning_text or "",
+        "answer_text": answer_text or "",
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
-        "reported_reasoning_tokens": reported_reasoning_tokens,
-        "reasoning_tokens": reasoning_tokens,
-        "answer_tokens": answer_tokens,
-        "reasoning_token_note": reasoning_token_note,
         "cost_yuan": cost_yuan,
         "correctness": correctness,
     }
 
 
 def compute_live_summary(direct: Dict[str, Any], trs: Dict[str, Any]) -> Dict[str, Any]:
-    reasoning_saved = None
-    if direct["reasoning_tokens"] is not None and trs["reasoning_tokens"] is not None:
-        reasoning_saved = direct["reasoning_tokens"] - trs["reasoning_tokens"]
+    completion_saved = None
+    if direct["completion_tokens"] is not None and trs["completion_tokens"] is not None:
+        completion_saved = direct["completion_tokens"] - trs["completion_tokens"]
 
     total_saved = None
     if direct["total_tokens"] is not None and trs["total_tokens"] is not None:
@@ -528,12 +386,12 @@ def compute_live_summary(direct: Dict[str, Any], trs: Dict[str, Any]) -> Dict[st
     if direct["cost_yuan"] is not None and trs["cost_yuan"] is not None:
         cost_saved = round(direct["cost_yuan"] - trs["cost_yuan"], 6)
 
-    reasoning_reduction_pct = None
-    if reasoning_saved is not None and direct["reasoning_tokens"] and direct["reasoning_tokens"] > 0:
-        reasoning_reduction_pct = round(reasoning_saved / direct["reasoning_tokens"] * 100, 2)
+    completion_reduction_pct = None
+    if completion_saved is not None and direct["completion_tokens"] and direct["completion_tokens"] > 0:
+        completion_reduction_pct = round(completion_saved / direct["completion_tokens"] * 100, 2)
     return {
-        "reasoning_tokens_saved": reasoning_saved,
-        "reasoning_reduction_pct": reasoning_reduction_pct,
+        "completion_tokens_saved": completion_saved,
+        "completion_reduction_pct": completion_reduction_pct,
         "total_tokens_saved": total_saved,
         "cost_saved_yuan": cost_saved,
     }
@@ -545,8 +403,7 @@ def model_payload(config: ModelConfig) -> Dict[str, Any]:
         "label": config.label,
         "apiModel": config.api_model,
         "supportsReasoningTrace": config.supports_reasoning_trace,
-        "fallbackReasoningFromContent": config.fallback_reasoning_from_content,
-        "showsReasoningTrace": config.supports_reasoning_trace or config.fallback_reasoning_from_content,
+        "showsReasoningTrace": config.supports_reasoning_trace,
         "paperPricing": {
             "inputYuanPerMillion": config.input_price_yuan_per_million,
             "outputYuanPerMillion": config.output_price_yuan_per_million,
@@ -555,25 +412,30 @@ def model_payload(config: ModelConfig) -> Dict[str, Any]:
 
 
 def call_model(question_text: str, prompt_text: str, config: ModelConfig, reference_answer: str) -> Dict[str, Any]:
-    req = make_api_request(prompt_text, config, stream=False)
-    timeout_seconds = int(os.environ.get("TRS_DEMO_TIMEOUT_SECONDS", "300"))
     opener = build_opener()
-    try:
-        with opener.open(req, timeout=timeout_seconds) as response:
-            raw = response.read().decode("utf-8")
-    except error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
-    except Exception as exc:
-        raise RuntimeError(str(exc)) from exc
+    timeout_seconds = get_timeout_seconds()
+    max_retries = get_max_retries()
+    parsed = None
+    last_error = ""
+    for attempt in range(1, max_retries + 1):
+        try:
+            with opener.open(make_api_request(prompt_text, config, stream=False), timeout=timeout_seconds) as response:
+                parsed = json.loads(response.read().decode("utf-8"))
+            break
+        except Exception as exc:
+            last_error = format_upstream_error(exc)
+            if attempt >= max_retries:
+                raise RuntimeError(f"Upstream API request failed after {max_retries} attempts: {last_error}") from exc
+            time.sleep(retry_sleep_seconds(attempt))
 
-    parsed = json.loads(raw)
+    if parsed is None:
+        raise RuntimeError(f"Upstream API request failed after {max_retries} attempts: {last_error}")
+
     choices = parsed.get("choices", [])
     message = choices[0].get("message", {}) if choices else {}
     usage = parsed.get("usage", {}) or {}
     return build_result(
         question_text=question_text,
-        prompt_text=prompt_text,
         config=config,
         reasoning_text=message.get("reasoning_content", "") or "",
         answer_text=message.get("content", "") or "",
@@ -588,51 +450,59 @@ def stream_model(
     config: ModelConfig,
     reference_answer: str,
     on_delta: Callable[[str, str], None],
+    on_retry: Callable[[int, int, str], None],
 ) -> Dict[str, Any]:
-    req = make_api_request(prompt_text, config, stream=True)
-    timeout_seconds = int(os.environ.get("TRS_DEMO_TIMEOUT_SECONDS", "300"))
     opener = build_opener()
-    reasoning_parts: list[str] = []
-    answer_parts: list[str] = []
-    usage: Dict[str, Any] = {}
+    timeout_seconds = get_timeout_seconds()
+    max_retries = get_max_retries()
+    last_error = ""
 
-    try:
-        with opener.open(req, timeout=timeout_seconds) as response:
-            for raw_line in response:
-                line = raw_line.decode("utf-8", errors="replace").strip()
-                if not line.startswith("data:"):
-                    continue
-                data = line[5:].strip()
-                if not data or data == "[DONE]":
-                    continue
-                chunk = json.loads(data)
-                if chunk.get("usage"):
-                    usage = chunk["usage"]
-                choices = chunk.get("choices", [])
-                delta = choices[0].get("delta", {}) if choices else {}
-                reasoning_piece = delta.get("reasoning_content", "") or ""
-                answer_piece = delta.get("content", "") or ""
-                if reasoning_piece:
-                    reasoning_parts.append(reasoning_piece)
-                    on_delta("reasoning", reasoning_piece)
-                if answer_piece:
-                    answer_parts.append(answer_piece)
-                    on_delta("reasoning" if config.fallback_reasoning_from_content else "answer", answer_piece)
-    except error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
-    except Exception as exc:
-        raise RuntimeError(str(exc)) from exc
+    for attempt in range(1, max_retries + 1):
+        reasoning_parts: list[str] = []
+        answer_parts: list[str] = []
+        usage: Dict[str, Any] = {}
 
-    return build_result(
-        question_text=question_text,
-        prompt_text=prompt_text,
-        config=config,
-        reasoning_text="".join(reasoning_parts),
-        answer_text="".join(answer_parts),
-        usage=usage,
-        reference_answer=reference_answer,
-    )
+        try:
+            with opener.open(make_api_request(prompt_text, config, stream=True), timeout=timeout_seconds) as response:
+                for raw_line in response:
+                    line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:]
+                    if data.startswith(" "):
+                        data = data[1:]
+                    if not data or data == "[DONE]":
+                        continue
+                    chunk = json.loads(data)
+                    if chunk.get("usage"):
+                        usage = chunk["usage"]
+                    choices = chunk.get("choices", [])
+                    delta = choices[0].get("delta", {}) if choices else {}
+                    reasoning_piece = delta.get("reasoning_content", "") or ""
+                    answer_piece = delta.get("content", "") or ""
+                    if reasoning_piece:
+                        reasoning_parts.append(reasoning_piece)
+                        on_delta("reasoning", reasoning_piece)
+                    if answer_piece:
+                        answer_parts.append(answer_piece)
+                        on_delta("answer", answer_piece)
+
+            return build_result(
+                question_text=question_text,
+                config=config,
+                reasoning_text="".join(reasoning_parts),
+                answer_text="".join(answer_parts),
+                usage=usage,
+                reference_answer=reference_answer,
+            )
+        except Exception as exc:
+            last_error = format_upstream_error(exc)
+            if attempt >= max_retries:
+                raise RuntimeError(f"Upstream API request failed after {max_retries} attempts: {last_error}") from exc
+            on_retry(attempt + 1, max_retries, last_error)
+            time.sleep(retry_sleep_seconds(attempt))
+
+    raise RuntimeError(f"Upstream API request failed after {max_retries} attempts: {last_error}")
 
 
 def serialize_live_comparison(example: Dict[str, Any], config: ModelConfig) -> Dict[str, Any]:
@@ -761,6 +631,15 @@ class DemoHandler(SimpleHTTPRequestHandler):
                     config=config,
                     reference_answer=reference_answer,
                     on_delta=lambda kind, text: emit("lane_delta", {"lane": lane, "kind": kind, "text": text}),
+                    on_retry=lambda attempt, max_attempts, error_message: emit(
+                        "lane_retry",
+                        {
+                            "lane": lane,
+                            "attempt": attempt,
+                            "maxAttempts": max_attempts,
+                            "error": error_message,
+                        },
+                    ),
                 )
                 if lane == "trs":
                     result["skill_text"] = skill_text
