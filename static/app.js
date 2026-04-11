@@ -13,7 +13,11 @@ const state = {
     trs: 1,
   },
   streamError: null,
+  streamSawLaneOutput: false,
 };
+
+const STREAM_CONNECT_MAX_RETRIES = 3;
+const RUN_RESTART_MAX_RETRIES = 2;
 
 const nodes = {
   exampleList: document.getElementById("exampleList"),
@@ -60,6 +64,10 @@ function formatMaybeReductionPercent(value) {
 
 function formatMaybeYuan(value) {
   return Number.isFinite(value) ? formatYuan(value) : "N/A";
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function typesetMath(targets = []) {
@@ -243,9 +251,9 @@ function openTracePanels() {
   });
 }
 
-function seedReasoningPlaceholders() {
-  seedLanePlaceholders("direct");
-  seedLanePlaceholders("trs");
+function seedReasoningPlaceholders(retry = false) {
+  seedLanePlaceholders("direct", retry);
+  seedLanePlaceholders("trs", retry);
 }
 
 function updateRunStatus() {
@@ -319,9 +327,11 @@ function handleStreamEvent(eventName, payload) {
       updateRunStatus();
       return false;
     case "lane_delta":
+      state.streamSawLaneOutput = true;
       appendLaneDelta(payload.lane, payload.kind, payload.text);
       return false;
     case "lane_result":
+      state.streamSawLaneOutput = true;
       state.streamProgress[payload.lane] = true;
       state.laneAttempts[payload.lane] = Math.max(state.laneAttempts[payload.lane], 1);
       finalizeLaneResult(payload.lane, payload.result);
@@ -357,12 +367,14 @@ function consumeSSEBlock(block) {
 }
 
 async function consumeEventStream(response) {
+  if (!response.body) {
+    throw new Error("The browser did not expose a readable response stream.");
+  }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let streamComplete = false;
 
-  while (!streamComplete) {
+  while (true) {
     const { value, done } = await reader.read();
     if (done) {
       buffer += decoder.decode();
@@ -373,18 +385,90 @@ async function consumeEventStream(response) {
     while (boundary !== -1) {
       const block = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
-      streamComplete = consumeSSEBlock(block) || streamComplete;
-      if (streamComplete) {
-        await reader.cancel();
-        break;
+      if (consumeSSEBlock(block)) {
+        return;
       }
       boundary = buffer.indexOf("\n\n");
     }
   }
 
-  if (!streamComplete && buffer.trim()) {
-    consumeSSEBlock(buffer);
+  if (buffer.trim()) {
+    if (consumeSSEBlock(buffer)) {
+      return;
+    }
   }
+
+  throw new Error("The live stream closed before the run completed.");
+}
+
+function isRetryableStreamStatus(status) {
+  return [408, 425, 429, 500, 502, 503, 504].includes(status);
+}
+
+function isRetryableStreamError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    error instanceof TypeError ||
+    message.includes("load failed") ||
+    message.includes("failed to fetch") ||
+    message.includes("networkerror") ||
+    message.includes("network error") ||
+    message.includes("stream closed before the run completed")
+  );
+}
+
+async function openRunStreamResponse() {
+  let lastError = new Error("Live stream connection failed.");
+
+  for (let attempt = 1; attempt <= STREAM_CONNECT_MAX_RETRIES; attempt += 1) {
+    try {
+      if (attempt > 1) {
+        nodes.runStatus.textContent = `Reconnecting live stream (${attempt}/${STREAM_CONNECT_MAX_RETRIES})...`;
+      }
+
+      const response = await fetch("/api/run_stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          exampleId: state.exampleId,
+          modelId: state.modelId,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Request failed with status ${response.status}`;
+        try {
+          const payload = await response.json();
+          errorMessage = payload.error || errorMessage;
+        } catch {}
+
+        if (attempt < STREAM_CONNECT_MAX_RETRIES && isRetryableStreamStatus(response.status)) {
+          lastError = new Error(errorMessage);
+          await sleep(250 * attempt);
+          continue;
+        }
+        throw new Error(errorMessage);
+      }
+
+      if (!response.body) {
+        throw new Error("The browser did not expose a readable response stream.");
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt >= STREAM_CONNECT_MAX_RETRIES || !isRetryableStreamError(lastError)) {
+        throw lastError;
+      }
+      await sleep(250 * attempt);
+    }
+  }
+
+  throw lastError;
 }
 
 async function runComparison() {
@@ -396,6 +480,7 @@ async function runComparison() {
   openTracePanels();
   state.running = true;
   state.streamError = null;
+  state.streamSawLaneOutput = false;
   state.streamProgress = { direct: false, trs: false };
   state.laneAttempts = { direct: 1, trs: 1 };
   state.activeModel = state.payload.models[state.modelId];
@@ -407,27 +492,31 @@ async function runComparison() {
   updateRunStatus();
 
   try {
-    const response = await fetch("/api/run_stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        exampleId: state.exampleId,
-        modelId: state.modelId,
-      }),
-    });
-
-    if (!response.ok) {
-      let errorMessage = `Request failed with status ${response.status}`;
+    for (let attempt = 1; attempt <= RUN_RESTART_MAX_RETRIES; attempt += 1) {
       try {
-        const payload = await response.json();
-        errorMessage = payload.error || errorMessage;
-      } catch {}
-      throw new Error(errorMessage);
-    }
-
-    await consumeEventStream(response);
-    if (state.streamError) {
-      throw new Error(state.streamError);
+        const response = await openRunStreamResponse();
+        await consumeEventStream(response);
+        if (state.streamError) {
+          throw new Error(state.streamError);
+        }
+        return;
+      } catch (error) {
+        const retryable = isRetryableStreamError(error);
+        const noFinishedLane = !state.streamProgress.direct && !state.streamProgress.trs;
+        const noLaneOutput = !state.streamSawLaneOutput;
+        if (attempt >= RUN_RESTART_MAX_RETRIES || !retryable || !noFinishedLane || !noLaneOutput) {
+          throw error;
+        }
+        state.streamError = null;
+        state.streamSawLaneOutput = false;
+        state.laneAttempts = { direct: 1, trs: 1 };
+        resetLanePanels();
+        setLaneStreaming("direct", true);
+        setLaneStreaming("trs", true);
+        seedReasoningPlaceholders(true);
+        nodes.runStatus.textContent = "The first stream connection dropped. Restarting automatically...";
+        await sleep(350);
+      }
     }
   } catch (error) {
     nodes.runStatus.textContent = `Live run failed: ${error.message}`;
