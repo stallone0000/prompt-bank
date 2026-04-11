@@ -87,6 +87,16 @@ MODEL_META = {
             "outputYuanPerMillion": 5.4,
         },
     },
+    "oss20": {
+        "label": "GPT-OSS-20B",
+        "apiModel": "qiniu/gpt-oss-20b",
+        "promptStyle": "cod",
+        "supportsReasoningTrace": True,
+        "paperPricing": {
+            "inputYuanPerMillion": 1.08,
+            "outputYuanPerMillion": 5.4,
+        },
+    },
     "gemini": {
         "label": "Gemini 3 Flash",
         "apiModel": "cloudsway/gemini-3-flash-preview",
@@ -151,6 +161,7 @@ def main() -> None:
                 "archived": {
                     "doubao": build_model_archive(direct_doubao, trs_doubao),
                     "oss": build_model_archive(direct_oss, trs_oss),
+                    "oss20": build_model_archive(direct_oss, trs_oss),
                     "gemini": build_model_archive(direct_gemini, trs_gemini),
                 },
             }

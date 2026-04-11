@@ -24,6 +24,16 @@
         "outputYuanPerMillion": 5.4
       }
     },
+    "oss20": {
+      "label": "GPT-OSS-20B",
+      "apiModel": "qiniu/gpt-oss-20b",
+      "promptStyle": "cod",
+      "supportsReasoningTrace": true,
+      "paperPricing": {
+        "inputYuanPerMillion": 1.08,
+        "outputYuanPerMillion": 5.4
+      }
+    },
     "gemini": {
       "label": "Gemini 3 Flash",
       "apiModel": "cloudsway/gemini-3-flash-preview",
@@ -58,6 +68,16 @@
           }
         },
         "oss": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "INCORRECT",
+            "skill_text": "1. When encountering bisectors of supplementary angles (angles forming a linear pair), immediately recognize that the angle between the two bisectors is $90^\\circ$. This creates a right-angled structure that often serves as the foundation for further trigonometric or geometric proofs.\n2. When a segment connecting two sides of a triangle is parallel to the base, apply the Intercept Theorem (Thales's Theorem) to establish proportional segments. If these segments are also defined by angle bisectors, combine the Intercept Theorem with the Angle Bisector Theorem to derive constraints on the base segments (e.g., proving a point is a midpoint).\n3. When asked for a specific angle measure in a general geometric configuration, check for \"Geometric Invariance.\" If the problem is solvable, the answer must hold for special cases. Testing a symmetric case (like an isosceles triangle) can quickly reveal the constant value, provided the constraints are still satisfied.\n4. When calculating an angle involving a line parallel to a base ($EF \\parallel AC$), use the property of alternate interior angles to \"translate\" the angle to a vertex on the base. This often transforms a floating angle into a known sub-angle of the primary triangle.\n5. Be cautious of assuming symmetry prematurely. Always verify if the given constraints (like parallelism) mathematically force the triangle into a specific class (e.g., isosceles or right-angled) by setting up the ratio equations $AE/EB = BF/FC$ and substituting the bisector ratios.",
+            "skill_score": 149.141
+          }
+        },
+        "oss20": {
           "direct": {
             "verification": "CORRECT"
           },
@@ -110,6 +130,16 @@
             "skill_score": 122.76
           }
         },
+        "oss20": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "skill_text": "1. When encountering a limit of a probability involving a stochastic process, perform a \"Scaling Analysis\" by comparing the threshold magnitude to the process's standard deviation. If the threshold (e.g., $O(N)$) grows faster than the typical fluctuations (e.g., $O(\\sqrt{N})$), the probability of the process staying within the threshold typically converges to 1. Be cautious of cases where the threshold scales with the standard deviation, as these require functional central limit theorems (Donsker's Invariance Principle).\n2. When analyzing the maximum of a sequence of partial sums ($\\max |S_i|$), leverage the property that if $S_n/n \\to \\mu$ almost surely, then $\\max_{i \\leq n} |S_i|/n \\to |\\mu|$ almost surely. This allows for the simplification of \"running maximum\" problems into \"terminal value\" problems using the Strong Law of Large Numbers.\n3. Adopt \"Concentration Inequalities\" (like Hoeffding's or Azuma's) rather than simple variance-based bounds (like Chebyshev) when dealing with sums of bounded independent variables. These provide exponential decay rates which are essential for proving that tail probabilities vanish in the limit.\n4. Use the \"Union Bound\" in conjunction with tail inequalities to bound the probability of a maximum exceeding a value. If $\\text{Pr}(|S_i| > \\epsilon N)$ decays faster than $1/N$, the probability that the maximum exceeds $\\epsilon N$ will also vanish.\n5. When asked for an \"upper bound for a limit\" where the event is almost certain (probability $\\to 1$), the tightest possible upper bound is 1. Avoid over-calculating specific decay rates unless the question explicitly asks for the rate of convergence or a bound for a finite $N$.",
+            "skill_score": 122.76
+          }
+        },
         "gemini": {
           "direct": {
             "verification": "CORRECT"
@@ -144,6 +174,16 @@
           }
         },
         "oss": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "skill_text": "1. When encountering a limit of a complex fraction as a variable approaches zero, adopt the \"Leading Term Analysis\" strategy by replacing each transcendental function with its first non-zero Taylor series term. This reduces the expression to a ratio of power functions, making the order of growth immediately apparent. Be cautious of subtractions that might cause leading terms to cancel, which would necessitate higher-order expansions.\n2. When dealing with nested functions (e.g., $f(g(h(x)))$), adopt a \"Bottom-Up Expansion\" approach by expanding the innermost function first and substituting its leading term into the next layer. This prevents algebraic complexity and ensures the correct power of the variable is preserved. Be cautious of ignoring lower-order terms too early if the problem involves subtraction of similar magnitudes.\n3. When encountering trigonometric expressions like $1 - \\sin^2(x)$ or $1 - \\cos^2(x)$, adopt \"Identity Pre-simplification\" because using basic identities (e.g., $\\cos^2(x)$) is computationally cheaper and less error-prone than expanding the squared series of the original function. Be cautious of the limit point; identities are always valid, but series expansions are only valid near the expansion point.\n4. When the expression involves fractional exponents, adopt \"Exact Exponent Arithmetic\" by keeping all powers in fraction form rather than decimals. This ensures that the comparison between the numerator's total degree ($D_n$) and the denominator's total degree ($D_d$) is precise. If $D_n > D_d$, the limit is 0; if $D_n = D_d$, the limit is the ratio of coefficients; if $D_n < D_d$, the limit diverges.\n5. When evaluating the limit of a product of multiple terms, adopt \"Independent Factor Expansion\" because the leading term of a product is simply the product of the leading terms of its factors. This allows you to decompose a daunting expression into manageable sub-problems. Be cautious of factors that approach a non-zero constant (like $\\cos(0)$), as their leading term is the constant itself, not a power of the variable.",
+            "skill_score": 22.773
+          }
+        },
+        "oss20": {
           "direct": {
             "verification": "CORRECT"
           },
@@ -196,6 +236,16 @@
             "skill_score": 31.162
           }
         },
+        "oss20": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "skill_text": "1. When encountering an integral of the form $\\int e^{-r f(x)} dx$ where $r \\to \\infty$, adopt Laplace's Method by identifying the global minima of $f(x)$ within the integration interval because the integrand becomes sharply peaked at these points, and contributions from elsewhere become exponentially negligible. Be cautious of minima occurring at the boundaries, as this typically halves the resulting integral value compared to an interior minimum.\n2. When the exponent involves trigonometric functions near their roots, adopt a local Taylor expansion (e.g., $\\cos(\\theta) \\approx -(\\theta - \\pi/2)$ near $\\pi/2$) because this transforms the complex integrand into a standard Gaussian form $\\int e^{-ax^2} dx$. Be cautious of the order of the first non-zero derivative; if the first derivative is zero, you must use the second-order term.\n3. When evaluating the limit of a parameter-dependent integral, adopt a scaling analysis of the peak's width and height because if the peak width shrinks (e.g., $O(1/\\sqrt{r})$) while the height remains constant or grows slower than the width shrinks, the limit is likely zero. Be cautious of pre-exponential factors that might depend on $r$ and counteract the decay.\n4. When the integrand exhibits symmetry (e.g., $\\cos^2(\\theta)$ around $\\pi/2$), adopt interval splitting or doubling because it simplifies the bounds and allows you to focus on a single local minimum. Be cautious of missing multiple equivalent peaks within the original bounds, which would lead to an underestimation by a constant factor.\n5. When extending finite integration limits to $\\pm \\infty$ for asymptotic approximation, adopt the \"Tail Negligibility\" principle because as $r \\to \\infty$, the error introduced by the tails of the Gaussian approximation decays faster than the main contribution. Be cautious if the function $f(x)$ has other minima with the same value, as they must all be summed.",
+            "skill_score": 31.162
+          }
+        },
         "gemini": {
           "direct": {
             "verification": "CORRECT"
@@ -230,6 +280,16 @@
           }
         },
         "oss": {
+          "direct": {
+            "verification": "CORRECT"
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "skill_text": "1. When encountering a problem asking for the number of distinct terms in a multinomial expansion $(x^{a_1} + x^{a_2} + \\dots + x^{a_m})^n$, transform the problem into finding the set of all possible sums of $n$ integers chosen from the set of exponents $\\{a_1, a_2, \\dots, a_m\\}$. Be cautious of potential coefficient cancellations if the base terms have negative signs; if all coefficients are positive, every reachable sum corresponds to a distinct term.\n2. To determine the range of possible exponents, calculate the theoretical minimum ($n \\cdot \\min(a_i)$) and maximum ($n \\cdot \\max(a_i)$). If the set of base exponents contains values that allow for a \"unit step\" (e.g., if $a_j - a_i = 1$ for some $i, j$), it is highly likely that every integer within the range is reachable.\n3. Use parity analysis to identify \"gaps\" in the set of reachable sums. If all base exponents $a_i$ share the same parity, the sum of $n$ such exponents will have a fixed parity (depending on $n$), potentially skipping every other integer in the range.\n4. When the base set of exponents is symmetric (e.g., $\\{-2, -1, 1, 2\\}$), the resulting set of sums will also be symmetric around zero. This allows you to focus only on the non-negative range $[0, \\text{max}]$ and double the count (subtracting one for the overlapping zero).\n5. For complex sets of exponents, define the sum as a linear combination $k = \\sum c_i a_i$ subject to $\\sum c_i = n$. Test the \"reachability\" of the boundaries of the range and check if the \"step size\" between possible sums can be reduced to 1 by swapping one base exponent for another. Be cautious of small $n$ values where the constraints $\\sum c_i = n$ might prevent reaching certain intermediate values.",
+            "skill_score": 62.013
+          }
+        },
+        "oss20": {
           "direct": {
             "verification": "CORRECT"
           },

@@ -71,7 +71,7 @@ http://localhost:8080
 - `TRS_DEMO_TIMEOUT_SECONDS`
   - default: `300`
 - `TRS_DEMO_MAX_TOKENS`
-  - default: `16000`
+  - default: `32000`
 - `TRS_DEMO_TEMPERATURE`
   - default: `0.7`
 - `PORT`
