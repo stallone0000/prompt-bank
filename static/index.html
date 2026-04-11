@@ -68,16 +68,20 @@
 
           <section class="context-grid">
             <article class="question-panel">
-              <div class="question-topline">
-                <span class="badge" id="topicBadge"></span>
-                <span class="badge subtle" id="difficultyBadge"></span>
+              <div class="question-summary">
+                <div class="question-topline">
+                  <span class="badge" id="topicBadge"></span>
+                  <span class="badge subtle" id="difficultyBadge"></span>
+                </div>
+                <h2 id="questionTitle"></h2>
+                <p id="questionSubtitle" class="question-subtitle"></p>
               </div>
-              <h2 id="questionTitle"></h2>
-              <p id="questionSubtitle" class="question-subtitle"></p>
-              <div id="questionText" class="question-text"></div>
-              <div class="answer-strip">
-                <span>Reference answer</span>
-                <strong id="referenceAnswer"></strong>
+              <div class="question-body">
+                <div id="questionText" class="question-text"></div>
+                <div class="answer-strip">
+                  <span>Reference answer</span>
+                  <strong id="referenceAnswer"></strong>
+                </div>
               </div>
             </article>
           </section>
