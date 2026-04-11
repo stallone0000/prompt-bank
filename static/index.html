@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TRS DeepMath Live Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [["\\(", "\\)"], ["$", "$"]],
+          displayMath: [["\\[", "\\]"], ["$$", "$$"]]
+        },
+        svg: {
+          fontCache: "global"
+        }
+      };
+    </script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"
+    ></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">ACL Demo • DeepMath-Only</p>
+          <h1>TRS shows the model a reusable skill before it starts thinking.</h1>
+          <p class="hero-text">
+            Pick one DeepMath example, switch between model families, and run a
+            live direct-vs-TRS comparison. The page keeps the 360 API key on
+            the server side while exposing the retrieved skill card, the live
+            reasoning trace, and the token/cost deltas.
+          </p>
+        </div>
+        <div class="hero-stats" id="heroStats">
+          <div class="hero-card">
+            <span>Dataset</span>
+            <strong>DeepMath-103K</strong>
+          </div>
+          <div class="hero-card">
+            <span>Mode</span>
+            <strong>Curated Examples</strong>
+          </div>
+          <div class="hero-card">
+            <span>Comparison</span>
+            <strong>Direct vs TRS</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="examples-panel">
+          <div class="panel-heading">
+            <h2>Showcase Problems</h2>
+            <p>Select an example from the rebuttal / paper runs.</p>
+          </div>
+          <div id="exampleList" class="example-list"></div>
+        </aside>
+
+        <section class="main-panel">
+          <div class="controls">
+            <div class="model-toggle" id="modelToggle"></div>
+            <button id="runButton" class="run-button">Run Live Comparison</button>
+          </div>
+
+          <article class="question-card">
+            <div class="question-topline">
+              <span class="badge" id="topicBadge"></span>
+              <span class="badge subtle" id="difficultyBadge"></span>
+            </div>
+            <h2 id="questionTitle"></h2>
+            <p id="questionSubtitle" class="question-subtitle"></p>
+            <div id="questionText" class="question-text"></div>
+            <div class="answer-strip">
+              <span>Reference answer</span>
+              <strong id="referenceAnswer"></strong>
+            </div>
+          </article>
+
+          <section class="summary-grid">
+            <div class="summary-card warm">
+              <span>Archived CoT Reduction</span>
+              <strong id="archivedReduction">-</strong>
+            </div>
+            <div class="summary-card">
+              <span>Archived Total Tokens Saved</span>
+              <strong id="archivedTokensSaved">-</strong>
+            </div>
+            <div class="summary-card">
+              <span>Retrieved Skill Score</span>
+              <strong id="archivedSkillScore">-</strong>
+            </div>
+          </section>
+
+          <section class="skill-section">
+            <div class="section-heading">
+              <h3>Retrieved Skill Card</h3>
+              <p>
+                This is the archived full-library TRS skill card used as the
+                prefix for the live TRS run.
+              </p>
+            </div>
+            <pre id="skillCard" class="skill-card"></pre>
+          </section>
+
+          <section class="result-section">
+            <div class="section-heading">
+              <h3>Live Comparison</h3>
+              <p id="runStatus">
+                No live run yet. Press the button to query the model twice: once
+                with no skill prefix, and once with the archived TRS skill card.
+              </p>
+            </div>
+
+            <div id="liveSummary" class="live-summary hidden"></div>
+
+            <div class="result-grid">
+              <article class="result-card">
+                <div class="result-header">
+                  <span class="pill">Direct</span>
+                  <h4>No Skill Prefix</h4>
+                </div>
+                <div id="directMetrics" class="metrics-grid"></div>
+                <details class="trace-panel">
+                  <summary>Reasoning trace</summary>
+                  <pre id="directReasoning"></pre>
+                </details>
+                <details class="trace-panel">
+                  <summary>Final answer</summary>
+                  <pre id="directAnswer"></pre>
+                </details>
+              </article>
+
+              <article class="result-card emphasis">
+                <div class="result-header">
+                  <span class="pill accent">TRS</span>
+                  <h4>Archived Skill Prefix</h4>
+                </div>
+                <div id="trsMetrics" class="metrics-grid"></div>
+                <details class="trace-panel">
+                  <summary>Reasoning trace</summary>
+                  <pre id="trsReasoning"></pre>
+                </details>
+                <details class="trace-panel">
+                  <summary>Final answer</summary>
+                  <pre id="trsAnswer"></pre>
+                </details>
+              </article>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <template id="exampleCardTemplate">
+      <button class="example-card">
+        <span class="example-kicker"></span>
+        <strong class="example-title"></strong>
+        <span class="example-highlight"></span>
+      </button>
+    </template>
+
+    <script src="/app.js"></script>
+  </body>
+  </html>

@@ -1,0 +1,309 @@
+{
+  "title": "TRS DeepMath Live Demo",
+  "dataset": "DeepMath-103K",
+  "scope": "Curated DeepMath examples from the ACL rebuttal / final paper workflow. Live inference compares the direct prompt against the archived full-library TRS skill card for the same example and model family.",
+  "note": "Archived savings are estimated from stored reasoning traces. Live runs use paper-aligned prompt families and compute token/cost stats from the API response.",
+  "models": {
+    "doubao": {
+      "label": "Doubao Seed 1.8",
+      "apiModel": "volcengine/doubao-seed-1-8",
+      "promptStyle": "short",
+      "paperPricing": {
+        "inputYuanPerMillion": 0.8,
+        "outputYuanPerMillion": 2.0
+      }
+    },
+    "oss": {
+      "label": "GPT-OSS-120B",
+      "apiModel": "qiniu/gpt-oss-120b",
+      "promptStyle": "cod",
+      "paperPricing": {
+        "inputYuanPerMillion": 1.08,
+        "outputYuanPerMillion": 5.4
+      }
+    }
+  },
+  "examples": [
+    {
+      "id": "laurent-terms",
+      "questionId": "q_66084",
+      "title": "Counting Distinct Terms",
+      "subtitle": "Laurent polynomial expansion",
+      "highlight": "A short skill card collapses a long expansion search into an exponent-range argument.",
+      "question": "Determine the number of distinct terms in the expansion of \\(\\left(x+\\frac{1}{x}+\\frac{1}{x^2}+x^2\\right)^{15}\\) with respect to powers of \\(x\\).",
+      "answer": "61",
+      "topic": "Mathematics -> Algebra -> Algebra -> Polynomial Operations",
+      "difficulty": 6.0,
+      "archived": {
+        "doubao": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 9207,
+            "estimatedAnswerTokens": 802,
+            "estimatedTotalTokens": 10009
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 1912,
+            "estimatedAnswerTokens": 176,
+            "estimatedTotalTokens": 2088,
+            "skill_text": "1. When encountering a Laurent polynomial (an expression with both positive and negative powers of $x$), adopt the strategy of factoring out the lowest power to transform it into a standard polynomial divided by a monomial ($P(x)^n / x^k$). This shifts the problem to finding the range of exponents in a standard polynomial.\n2. When determining the number of distinct terms in $P(x)^n$, first identify the minimum and maximum possible exponents ($n \\cdot \\min\\_exp$ and $n \\cdot \\max\\_exp$). If the base polynomial $P(x)$ contains a contiguous sequence of exponents, the resulting expansion $P(x)^n$ will also likely have a contiguous sequence of exponents.\n3. To verify if a polynomial $P(x)^n$ has \"gaps\" in its exponents, use induction or check small cases (e.g., $n=2, 3$). Be cautious of \"sparse\" polynomials like $(x^2 + 1)^n$, which only contain even powers, as these will always have gaps regardless of the power $n$.\n4. When multiplying two polynomials $A(x)$ and $B(x)$ that both have contiguous exponent ranges $[0, a]$ and $[0, b]$, the product $A(x)B(x)$ will have a contiguous range $[0, a+b]$ unless specific coefficient cancellations occur. Reasoning: The existence of a term $x^k$ in the product is guaranteed if $k$ can be partitioned into $s+t$ where $s \\in \\text{exponents}(A)$ and $t \\in \\text{exponents}(B)$.\n5. When faced with a multinomial expansion $(x_1 + x_2 + ... + x_m)^n$, treat it as a problem of finding the set of all possible values of the linear combination of exponents $\\sum c_i a_i$ subject to $\\sum a_i = n$. If the coefficients $c_i$ allow for a step size of 1, the range is likely a complete interval of integers.",
+            "skill_score": 60.084
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 7295,
+            "estimatedTotalTokensSaved": 7921,
+            "estimatedReasoningReductionPct": 79.23
+          }
+        },
+        "oss": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 7436,
+            "estimatedAnswerTokens": 1133,
+            "estimatedTotalTokens": 8569
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 2095,
+            "estimatedAnswerTokens": 1318,
+            "estimatedTotalTokens": 3413,
+            "skill_text": "1. When encountering a problem asking for the number of distinct terms in a multinomial expansion $(x^{a_1} + x^{a_2} + \\dots + x^{a_m})^n$, transform the problem into finding the set of all possible sums of $n$ integers chosen from the set of exponents $\\{a_1, a_2, \\dots, a_m\\}$. Be cautious of potential coefficient cancellations if the base terms have negative signs; if all coefficients are positive, every reachable sum corresponds to a distinct term.\n2. To determine the range of possible exponents, calculate the theoretical minimum ($n \\cdot \\min(a_i)$) and maximum ($n \\cdot \\max(a_i)$). If the set of base exponents contains values that allow for a \"unit step\" (e.g., if $a_j - a_i = 1$ for some $i, j$), it is highly likely that every integer within the range is reachable.\n3. Use parity analysis to identify \"gaps\" in the set of reachable sums. If all base exponents $a_i$ share the same parity, the sum of $n$ such exponents will have a fixed parity (depending on $n$), potentially skipping every other integer in the range.\n4. When the base set of exponents is symmetric (e.g., $\\{-2, -1, 1, 2\\}$), the resulting set of sums will also be symmetric around zero. This allows you to focus only on the non-negative range $[0, \\text{max}]$ and double the count (subtracting one for the overlapping zero).\n5. For complex sets of exponents, define the sum as a linear combination $k = \\sum c_i a_i$ subject to $\\sum c_i = n$. Test the \"reachability\" of the boundaries of the range and check if the \"step size\" between possible sums can be reduced to 1 by swapping one base exponent for another. Be cautious of small $n$ values where the constraints $\\sum c_i = n$ might prevent reaching certain intermediate values.",
+            "skill_score": 62.013
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 5341,
+            "estimatedTotalTokensSaved": 5156,
+            "estimatedReasoningReductionPct": 71.83
+          }
+        }
+      }
+    },
+    {
+      "id": "root-count",
+      "questionId": "q_33616",
+      "title": "How Many Roots?",
+      "subtitle": "Range analysis beats brute force",
+      "highlight": "TRS retrieves the exact AM-GM plus range-analysis trick instead of letting the model wander.",
+      "question": "Determine the number of roots of the equation \\(4\\cos(e^x) = 2^x + 2^{-x}\\).",
+      "answer": "4",
+      "topic": "Mathematics -> Calculus -> Differential Calculus -> Applications of Derivatives",
+      "difficulty": 5.5,
+      "archived": {
+        "doubao": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 10739,
+            "estimatedAnswerTokens": 1002,
+            "estimatedTotalTokens": 11741
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 8148,
+            "estimatedAnswerTokens": 326,
+            "estimatedTotalTokens": 8474,
+            "skill_text": "1. When encountering equations involving transcendental functions of different types (e.g., trigonometric vs. exponential), adopt a Range Analysis Strategy because these equations rarely have closed-form algebraic solutions. Be cautious of assuming multiple roots exist just because the functions are periodic; the constraints of the non-periodic side often limit the solution space.\n2. If an expression has the form $a^x + a^{-x}$ (where $a > 0$), immediately apply the AM-GM inequality to establish a lower bound of 2. Reasoning: $y + 1/y \\geq 2$ for all $y > 0$, with equality strictly at $y=1$ ($x=0$). Be cautious of cases where $a$ might be negative or the domain of $x$ is restricted.\n3. When the maximum of the Left-Hand Side (LHS) equals the minimum of the Right-Hand Side (RHS), adopt the Extremal Intersection Method. The only possible solutions are the intersection of the sets $\\{x \\mid LHS(x) = \\text{max}\\}$ and $\\{x \\mid RHS(x) = \\text{min}\\}$. Be cautious of checking all points in the first set against the second, as the \"max\" value might occur at multiple points (e.g., in periodic functions).\n4. For trigonometric terms like $A\\cos(f(x))$, use the absolute bound $|A|$ to simplify the comparison. If the other side of the equation is strictly $\\geq A$, you only need to solve $f(x) = 2k\\pi$.\n5. Before performing complex calculus or derivatives, check for \"Trivial Equality\" at $x=0$ or $x=1$. Often, transcendental problems are constructed such that the intersection occurs at a point where both functions reach their natural extrema.",
+            "skill_score": 54.427
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 2591,
+            "estimatedTotalTokensSaved": 3267,
+            "estimatedReasoningReductionPct": 24.13
+          }
+        },
+        "oss": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 6609,
+            "estimatedAnswerTokens": 1520,
+            "estimatedTotalTokens": 8129
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 2998,
+            "estimatedAnswerTokens": 1307,
+            "estimatedTotalTokens": 4305,
+            "skill_text": "1. When encountering equations where different types of functions (e.g., trigonometric and exponential) are equated, perform a Range Analysis on both sides. If the maximum of one side equals the minimum of the other, the solution must occur at that specific boundary value.\n2. When observing expressions of the form $a^{f(x)} + a^{-f(x)}$, apply the AM-GM inequality ($t + 1/t \\ge 2$ for $t > 0$) to establish a lower bound. Be cautious of assuming the minimum is 2 if the domain of $f(x)$ is restricted such that $a^{f(x)}$ can never equal 1.\n3. For trigonometric terms like $A \\cos(g(x))$, use the property that the range is strictly bounded by $[-A, A]$. If the opposing side of the equation is shown to be $\\ge A$ or $\\le -A$, the problem simplifies from solving a general equation to solving the system where both sides equal the boundary constant.\n4. After identifying a candidate solution at a boundary point, verify the uniqueness of that point by checking the monotonicity or the second derivative of the bounding functions. If one side is strictly increasing/decreasing away from the boundary, no other solutions can exist.\n5. When solving for the argument of a periodic function at a boundary (e.g., $\\cos(\\theta) = 1$), remember that $\\theta = 2\\pi k$. Always substitute the candidate $x$ value back into the argument to ensure it aligns with an integer $k$.",
+            "skill_score": 52.554
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 3611,
+            "estimatedTotalTokensSaved": 3824,
+            "estimatedReasoningReductionPct": 54.64
+          }
+        }
+      }
+    },
+    {
+      "id": "laplace-limit",
+      "questionId": "q_71500",
+      "title": "A Laplace-Style Limit",
+      "subtitle": "Asymptotic integral on [0, pi]",
+      "highlight": "The retrieved skill points directly at boundary minima and Laplace's method.",
+      "question": "Evaluate the limit \\( \\lim_{R \\to \\infty} \\int_{0}^{\\pi} e^{-R\\sin (t)} \\, dt. \\)",
+      "answer": "0",
+      "topic": "Mathematics -> Calculus -> Integral Calculus -> Techniques of Integration -> Single-variable",
+      "difficulty": 7.5,
+      "archived": {
+        "doubao": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 8326,
+            "estimatedAnswerTokens": 1335,
+            "estimatedTotalTokens": 9661
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 576,
+            "estimatedAnswerTokens": 168,
+            "estimatedTotalTokens": 744,
+            "skill_text": "1. When evaluating $\\lim_{r \\to \\infty} \\int e^{-r f(x)} dx$, identify the global minima of $f(x)$. The integral's behavior is dominated by the neighborhood of these minima (Laplace's Method). If the minimum value $f(x_{min}) = 0$, the integral typically scales as $O(r^{-1/k})$ where $k$ is the order of the first non-zero derivative at the minimum.\n2. Apply the Dominated Convergence Theorem (DCT) for a quick qualitative check. If the integrand $e^{-r f(x)}$ is bounded by an integrable function $g(x)$ (e.g., $g(x)=1$ on a finite interval) and $f(x) > 0$ almost everywhere, the limit is the integral of the pointwise limit (usually 0).\n3. Use local Taylor expansions to simplify the integrand near the peak. For quadratic minima ($f''(x) > 0$), the integral behaves like a Gaussian integral $\\int e^{-r \\frac{f''(x_0)}{2}(x-x_0)^2} dx$, which yields a factor of $\\sqrt{2\\pi / (r f''(x_0))}$.\n4. To rigorously bound the integral, split the domain into a \"peak zone\" of width $\\delta$ and a \"decay zone.\" In the decay zone, the integrand is bounded by $e^{-r \\cdot \\min(f)}$, which vanishes exponentially. In the peak zone, the integral is bounded by the width $2\\delta$ times the maximum value (usually 1).\n5. When the exponent involves trigonometric functions like $\\cos^2(\\theta)$, use symmetry and periodic shifts (e.g., $t = \\theta - \\pi/2$) to center the peak at the origin, facilitating the use of standard approximations like $\\sin(t) \\approx t$.",
+            "skill_score": 32.492
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 7750,
+            "estimatedTotalTokensSaved": 8917,
+            "estimatedReasoningReductionPct": 93.08
+          }
+        },
+        "oss": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 484,
+            "estimatedAnswerTokens": 1029,
+            "estimatedTotalTokens": 1513
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 398,
+            "estimatedAnswerTokens": 1061,
+            "estimatedTotalTokens": 1459,
+            "skill_text": "1. When encountering an integral of the form $\\int e^{-r f(x)} dx$ where $r \\to \\infty$, adopt Laplace's Method by identifying the global minima of $f(x)$ within the integration interval because the integrand becomes sharply peaked at these points, and contributions from elsewhere become exponentially negligible. Be cautious of minima occurring at the boundaries, as this typically halves the resulting integral value compared to an interior minimum.\n2. When the exponent involves trigonometric functions near their roots, adopt a local Taylor expansion (e.g., $\\cos(\\theta) \\approx -(\\theta - \\pi/2)$ near $\\pi/2$) because this transforms the complex integrand into a standard Gaussian form $\\int e^{-ax^2} dx$. Be cautious of the order of the first non-zero derivative; if the first derivative is zero, you must use the second-order term.\n3. When evaluating the limit of a parameter-dependent integral, adopt a scaling analysis of the peak's width and height because if the peak width shrinks (e.g., $O(1/\\sqrt{r})$) while the height remains constant or grows slower than the width shrinks, the limit is likely zero. Be cautious of pre-exponential factors that might depend on $r$ and counteract the decay.\n4. When the integrand exhibits symmetry (e.g., $\\cos^2(\\theta)$ around $\\pi/2$), adopt interval splitting or doubling because it simplifies the bounds and allows you to focus on a single local minimum. Be cautious of missing multiple equivalent peaks within the original bounds, which would lead to an underestimation by a constant factor.\n5. When extending finite integration limits to $\\pm \\infty$ for asymptotic approximation, adopt the \"Tail Negligibility\" principle because as $r \\to \\infty$, the error introduced by the tails of the Gaussian approximation decays faster than the main contribution. Be cautious if the function $f(x)$ has other minima with the same value, as they must all be summed.",
+            "skill_score": 31.162
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 86,
+            "estimatedTotalTokensSaved": 54,
+            "estimatedReasoningReductionPct": 17.77
+          }
+        }
+      }
+    },
+    {
+      "id": "tetrahedron-volume",
+      "questionId": "q_85512",
+      "title": "Sphere-Inscribed Tetrahedron",
+      "subtitle": "3D geometry with a relevant coordinate trick",
+      "highlight": "The retrieved card turns the geometry into a compact coordinate setup.",
+      "question": "A tetrahedron \\(ABCD\\) is inscribed in a sphere \\(O\\), with \\(AD\\) as the diameter of the sphere. If \\(\\triangle ABC\\) and \\(\\triangle BCD\\) are equilateral triangles with side length 1, what is the volume of tetrahedron \\(ABCD\\)?\n\n(A) \\(\\frac{\\sqrt{2}}{6}\\)\n\n(B) \\(\\frac{\\sqrt{2}}{12}\\)\n\n(C) \\(\\frac{\\sqrt{3}}{6}\\)\n\n(D) \\(\\frac{\\sqrt{3}}{12}\\)",
+      "answer": "B",
+      "topic": "Mathematics -> Geometry -> Solid Geometry -> 3D Shapes",
+      "difficulty": 5.0,
+      "archived": {
+        "doubao": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 3948,
+            "estimatedAnswerTokens": 626,
+            "estimatedTotalTokens": 4574
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 3019,
+            "estimatedAnswerTokens": 281,
+            "estimatedTotalTokens": 3300,
+            "skill_text": "1. When encountering problems involving regular polyhedra and specific internal points (centroids, midpoints), adopt a Coordinate Geometry approach because it transforms abstract spatial relationships into solvable algebraic systems. Be cautious of arithmetic errors when handling irrational coordinates like $\\sqrt{2}, \\sqrt{3}, \\text{ or } \\sqrt{6}$.\n2. When finding the circumsphere of a set of points, adopt the General Sphere Equation $(x-a)^2 + (y-b)^2 + (z-c)^2 = R^2$ and solve the resulting system by subtracting equations to eliminate quadratic terms. Be cautious of assuming the sphere's center coincides with the polyhedron's center if the points do not form a highly symmetric subset.\n3. When working with a regular tetrahedron, adopt the property that the apex lies directly above the centroid of the base because this allows for immediate determination of $x$ and $y$ coordinates. Be cautious of the height calculation; remember the height $h$ satisfies $h^2 + r_{base}^2 = edge^2$, where $r_{base}$ is the distance from the centroid to a vertex.\n4. When calculating the surface area of a sphere, adopt the strategy of solving for $R^2$ directly rather than $R$ because the formula $4\\pi R^2$ does not require the square root. Be cautious of forgetting the $4\\pi$ factor or confusing surface area with volume ($4/3 \\pi R^3$).\n5. When a problem defines a point as a midpoint or centroid of previously defined points, adopt a sequential coordinate derivation strategy (Base $\\rightarrow$ Centroid $\\rightarrow$ Apex $\\rightarrow$ Midpoint). Be cautious of using the wrong \"base\" if the pyramid is a sub-structure of the original tetrahedron.",
+            "skill_score": 98.036
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 929,
+            "estimatedTotalTokensSaved": 1274,
+            "estimatedReasoningReductionPct": 23.53
+          }
+        },
+        "oss": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 4733,
+            "estimatedAnswerTokens": 1146,
+            "estimatedTotalTokens": 5879
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 1644,
+            "estimatedAnswerTokens": 1057,
+            "estimatedTotalTokens": 2701,
+            "skill_text": "1. When solving for the circumsphere of a subset of vertices in a highly symmetric 3D object (like a regular tetrahedron), adopt a Coordinate Geometry approach because it transforms abstract geometric constraints into a solvable system of linear equations. Be cautious of choosing an origin that doesn't simplify the coordinates of the base or the height.\n2. When finding the center of a sphere passing through four points, equate the squared distances from an unknown center $(x, y, z)$ to each point. Subtracting these equations pairwise is a powerful strategy because the quadratic terms ($x^2, y^2, z^2$) cancel out, leaving a system of linear equations representing the intersection of perpendicular bisector planes.\n3. When calculating coordinates for a regular tetrahedron of edge length $a$, remember the standard height is $a\\sqrt{6}/3$ and the distance from a vertex to the centroid of the opposite face is $a\\sqrt{6}/3$. Using these constants prevents derivation errors during the setup phase.\n4. When a problem involves midpoints or centroids of previously defined points, calculate their coordinates as simple arithmetic means. This maintains the linear relationship between points and simplifies the subsequent distance equations.\n5. When asked for the \"surface area of the circumsphere,\" always solve for $R^2$ directly rather than $R$. Since the formula is $4\\pi R^2$, keeping the value in its squared form avoids unnecessary square root operations and potential radical simplification errors.",
+            "skill_score": 93.097
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 3089,
+            "estimatedTotalTokensSaved": 3178,
+            "estimatedReasoningReductionPct": 65.27
+          }
+        }
+      }
+    },
+    {
+      "id": "inverse-integral",
+      "questionId": "q_22478",
+      "title": "Integral of a Function and Its Inverse",
+      "subtitle": "Geometric decomposition",
+      "highlight": "TRS recalls the classic area identity between a function and its inverse.",
+      "question": "Let \\( f \\) be a continuous, strictly decreasing, real-valued function such that \\( \\int_{0}^{+\\infty} f(x) \\, dx \\) is finite and \\( f(0)=1 \\). In terms of \\( f^{-1} \\) (the inverse function of \\( f \\)), \\( \\int_{0}^{+x} f(x) \\, dx \\) is:\n\n(A) less than \\( \\int_{1}^{+\\infty} f^{-1}(y) \\, dy \\)\n(B) greater than \\( \\int_{0}^{1} f^{-1}(y) \\, dy \\)\n(C) equal to \\( \\int_{1}^{+\\infty} f^{-1}(y) \\, dy \\)\n(D) equal to \\( \\int_{0}^{1} f^{-1}(y) \\, dy \\)\n(E) equal to \\( \\int_{0}^{+\\infty} f^{-1}(y) \\, dy \\)\n\nChoose the correct option.",
+      "answer": "D",
+      "topic": "Mathematics -> Calculus -> Integral Calculus -> Applications of Integrals",
+      "difficulty": 5.0,
+      "archived": {
+        "doubao": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 4425,
+            "estimatedAnswerTokens": 753,
+            "estimatedTotalTokens": 5178
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 1635,
+            "estimatedAnswerTokens": 174,
+            "estimatedTotalTokens": 1809,
+            "skill_text": "1. When encountering integrals of a function and its inverse (e.g., $\\int f(x) dx + \\int f^{-1}(y) dy$), visualize the problem geometrically as the decomposition of a rectangle in the Cartesian plane. The sum of these integrals represents the area covered by the region under the curve $y=f(x)$ and the region to the left of the curve (under $x=g(y)$).\n2. Adopt the \"Young's Inequality\" framework when comparing the sum of integrals of inverse functions to the product of their upper limits ($ab$). Recognize that the sum $\\int_0^a f(x)dx + \\int_0^b g(y)dy$ is always $\\ge ab$ for strictly increasing functions starting at the origin.\n3. Identify the equality condition for inverse integral sums: equality ($= ab$) occurs if and only if the upper limits satisfy $b = f(a)$ (or equivalently $a = g(b)$). Be cautious not to assume that constraints on the limits (like $a \\neq b$) automatically preclude the equality condition unless the function is specifically $f(x)=x$.\n4. When a function is defined as a bijection from $[0, \\infty)$ to $[0, \\infty)$ and is strictly increasing, use the property that $f(0)=0$ and $\\lim_{x \\to \\infty} f(x) = \\infty$ to anchor the lower bounds of your integrals.\n5. To determine if an inequality is strict or non-strict, test the \"boundary case\" where the point $(a, b)$ lies exactly on the curve $y=f(x)$. If the problem constraints allow $b=f(a)$, the relationship must be \"greater than or equal to.\"",
+            "skill_score": 167.174
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 2790,
+            "estimatedTotalTokensSaved": 3369,
+            "estimatedReasoningReductionPct": 63.05
+          }
+        },
+        "oss": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 3556,
+            "estimatedAnswerTokens": 673,
+            "estimatedTotalTokens": 4229
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 730,
+            "estimatedAnswerTokens": 351,
+            "estimatedTotalTokens": 1081,
+            "skill_text": "1. When encountering a sum of integrals involving a function and its inverse, adopt a geometric visualization of partitioning a rectangle because the sum represents the total area bounded by the axes and the coordinate $(a, f(a))$. Be cautious of non-zero lower bounds which necessitate subtracting a smaller inner rectangle.\n2. When evaluating the integral of an inverse function, adopt the substitution $y = f(x)$ because it transforms the integral into the domain of the original function, often revealing a structure solvable via integration by parts. Be cautious of functions that are not strictly monotonic, as the inverse may not be uniquely defined.\n3. When faced with an expression combining $\\int f(x) dx$ and $\\int x f'(x) dx$, adopt the reverse product rule (differentiation of $x \\cdot f(x)$) because it simplifies the sum into a single evaluation at the boundaries. Be cautious of potential discontinuities at the integration limits.",
+            "skill_score": 171.835
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 2826,
+            "estimatedTotalTokensSaved": 3148,
+            "estimatedReasoningReductionPct": 79.47
+          }
+        }
+      }
+    }
+  ],
+  "sources": {
+    "doubao_direct": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/acl_rebuttal_math_dual_20260326/data/doubao_eval_500_direct.jsonl",
+    "doubao_trs": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/acl_rebuttal_math_dual_20260326/baseline_results/doubao_ours_full_500.jsonl",
+    "oss_direct": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/acl_rebuttal_math_dual_20260326/data/oss_eval_500_direct.jsonl",
+    "oss_trs": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/acl_rebuttal_math_dual_20260326/baseline_results/oss_ours_full_500.jsonl"
+  }
+}

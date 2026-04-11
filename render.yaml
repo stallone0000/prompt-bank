@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: trs-deepmath-demo
+    env: docker
+    dockerfilePath: ./Dockerfile
+    autoDeploy: false
+    envVars:
+      - key: TRS_DEMO_API_KEY
+        sync: false
+      - key: TRS_DEMO_PROXY_URL
+        sync: false
