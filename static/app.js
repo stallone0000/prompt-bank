@@ -3,6 +3,12 @@ const state = {
   modelId: "doubao",
   exampleId: null,
   running: false,
+  activeModel: null,
+  streamProgress: {
+    direct: false,
+    trs: false,
+  },
+  streamError: null,
 };
 
 const nodes = {
@@ -34,8 +40,8 @@ function formatNumber(value) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-function formatPercent(value) {
-  return `${value > 0 ? "-" : ""}${Math.abs(value).toFixed(2)}%`;
+function formatReductionPercent(value) {
+  return `${Number(value || 0).toFixed(2)}%`;
 }
 
 function formatYuan(value) {
@@ -60,6 +66,7 @@ function renderModels() {
       state.modelId = modelId;
       renderModels();
       renderSelection();
+      clearLiveResults();
     });
     nodes.modelToggle.appendChild(button);
   });
@@ -99,29 +106,55 @@ function renderSelection() {
   nodes.questionSubtitle.textContent = example.subtitle;
   nodes.questionText.textContent = example.question;
   nodes.referenceAnswer.textContent = example.answer;
-  nodes.archivedReduction.textContent = formatPercent(archived.summary.estimatedReasoningReductionPct);
+  nodes.archivedReduction.textContent = formatReductionPercent(archived.summary.estimatedReasoningReductionPct);
   nodes.archivedTokensSaved.textContent = formatNumber(archived.summary.estimatedTotalTokensSaved);
   nodes.archivedSkillScore.textContent = archived.trs.skill_score.toFixed(3);
   nodes.skillCard.textContent = archived.trs.skill_text;
   typesetMath([nodes.questionText, nodes.referenceAnswer, nodes.skillCard]);
 }
 
+function laneNodes(lane) {
+  return lane === "direct"
+    ? {
+        metrics: nodes.directMetrics,
+        reasoning: nodes.directReasoning,
+        answer: nodes.directAnswer,
+      }
+    : {
+        metrics: nodes.trsMetrics,
+        reasoning: nodes.trsReasoning,
+        answer: nodes.trsAnswer,
+      };
+}
+
+function setLaneStreaming(lane, enabled) {
+  const laneNode = laneNodes(lane);
+  const supportsReasoning = state.activeModel?.supportsReasoningTrace;
+  laneNode.answer.classList.toggle("streaming", enabled);
+  laneNode.reasoning.classList.toggle("streaming", enabled && supportsReasoning);
+}
+
+function resetLanePanels() {
+  ["direct", "trs"].forEach((lane) => {
+    const laneNode = laneNodes(lane);
+    laneNode.metrics.innerHTML = "";
+    laneNode.reasoning.textContent = "";
+    laneNode.answer.textContent = "";
+    setLaneStreaming(lane, false);
+  });
+}
+
 function clearLiveResults() {
   nodes.liveSummary.classList.add("hidden");
   nodes.liveSummary.innerHTML = "";
-  nodes.directMetrics.innerHTML = "";
-  nodes.trsMetrics.innerHTML = "";
-  nodes.directReasoning.textContent = "";
-  nodes.trsReasoning.textContent = "";
-  nodes.directAnswer.textContent = "";
-  nodes.trsAnswer.textContent = "";
+  resetLanePanels();
   nodes.runStatus.textContent =
     "No live run yet. Press the button to query the model twice: once with no skill prefix, and once with the archived TRS skill card.";
 }
 
-function metricRow(label, value) {
+function metricRow(label, value, tone = "") {
   const wrapper = document.createElement("div");
-  wrapper.className = "metric";
+  wrapper.className = tone ? `metric ${tone}` : "metric";
   const span = document.createElement("span");
   span.textContent = label;
   const strong = document.createElement("strong");
@@ -131,14 +164,28 @@ function metricRow(label, value) {
 }
 
 function renderLiveMetrics(container, result) {
+  const correctness = result.correctness || {};
   container.innerHTML = "";
   container.append(
     metricRow("Prompt tokens", formatNumber(result.prompt_tokens)),
     metricRow("Completion tokens", formatNumber(result.completion_tokens)),
     metricRow("Total tokens", formatNumber(result.total_tokens)),
     metricRow("Estimated CoT tokens", formatNumber(result.estimated_reasoning_tokens)),
-    metricRow("Paper-priced cost", formatYuan(result.cost_yuan))
+    metricRow("Paper-priced cost", formatYuan(result.cost_yuan)),
+    metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
+    metricRow("Extracted answer", correctness.extracted_answer || "—", "muted"),
+    metricRow("Heuristic verdict", correctness.label || "Heuristic Match Unclear", verdictTone(correctness.status))
   );
+}
+
+function verdictTone(status) {
+  if (status === "correct") {
+    return "success";
+  }
+  if (status === "incorrect") {
+    return "warning";
+  }
+  return "muted";
 }
 
 function renderLiveSummary(summary) {
@@ -151,7 +198,7 @@ function renderLiveSummary(summary) {
     },
     {
       label: "Estimated CoT Reduction",
-      value: formatPercent(summary.estimated_reasoning_reduction_pct),
+      value: formatReductionPercent(summary.estimated_reasoning_reduction_pct),
     },
     {
       label: "Total Tokens Saved",
@@ -174,17 +221,156 @@ function renderLiveSummary(summary) {
   });
 }
 
+function openTracePanels() {
+  document.querySelectorAll(".trace-panel").forEach((panel) => {
+    panel.open = true;
+  });
+}
+
+function seedReasoningPlaceholders() {
+  if (state.activeModel?.supportsReasoningTrace) {
+    return;
+  }
+  const note = "(This model does not expose a separate reasoning trace on the current 360 API route.)";
+  nodes.directReasoning.textContent = note;
+  nodes.trsReasoning.textContent = note;
+}
+
+function updateRunStatus() {
+  const doneCount = Object.values(state.streamProgress).filter(Boolean).length;
+  if (!state.running) {
+    return;
+  }
+  if (doneCount === 0) {
+    nodes.runStatus.textContent = "Streaming direct and TRS runs from the server. Reasoning and answers will appear as chunks arrive.";
+    return;
+  }
+  if (doneCount === 1) {
+    const finishedLane = state.streamProgress.direct ? "Direct" : "TRS";
+    const waitingLane = state.streamProgress.direct ? "TRS" : "Direct";
+    nodes.runStatus.textContent = `${finishedLane} finished. ${waitingLane} is still streaming.`;
+    return;
+  }
+  nodes.runStatus.textContent = `${state.activeModel.label} finished. Costs below use the paper pricing constants embedded in the demo.`;
+}
+
+function finalizeLaneResult(lane, result) {
+  const laneNode = laneNodes(lane);
+  renderLiveMetrics(laneNode.metrics, result);
+  laneNode.reasoning.textContent =
+    result.reasoning_text ||
+    (state.activeModel?.supportsReasoningTrace
+      ? "(The API did not return a separate reasoning trace.)"
+      : "(This model does not expose a separate reasoning trace on the current 360 API route.)");
+  laneNode.answer.textContent = result.answer_text || "(No final answer returned.)";
+  setLaneStreaming(lane, false);
+  typesetMath([laneNode.reasoning, laneNode.answer]);
+}
+
+function appendLaneDelta(lane, kind, text) {
+  const laneNode = laneNodes(lane);
+  if (kind === "reasoning") {
+    if (laneNode.reasoning.textContent.startsWith("(This model does not expose")) {
+      laneNode.reasoning.textContent = "";
+    }
+    laneNode.reasoning.textContent += text;
+    return;
+  }
+  laneNode.answer.textContent += text;
+}
+
+function handleStreamEvent(eventName, payload) {
+  switch (eventName) {
+    case "meta":
+      state.activeModel = payload.model;
+      seedReasoningPlaceholders();
+      updateRunStatus();
+      return;
+    case "lane_status":
+      return;
+    case "lane_delta":
+      appendLaneDelta(payload.lane, payload.kind, payload.text);
+      return;
+    case "lane_result":
+      state.streamProgress[payload.lane] = true;
+      finalizeLaneResult(payload.lane, payload.result);
+      updateRunStatus();
+      return;
+    case "summary":
+      renderLiveSummary(payload.summary);
+      return;
+    case "error":
+      state.streamError = payload.error || "Unknown stream error";
+      return;
+    case "done":
+      return;
+    default:
+      return;
+  }
+}
+
+function consumeSSEBlock(block) {
+  let eventName = "message";
+  const dataLines = [];
+  block.split(/\r?\n/).forEach((line) => {
+    if (line.startsWith("event:")) {
+      eventName = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  });
+  if (!dataLines.length) {
+    return;
+  }
+  handleStreamEvent(eventName, JSON.parse(dataLines.join("\n")));
+}
+
+async function consumeEventStream(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      buffer += decoder.decode();
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      consumeSSEBlock(block);
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+
+  if (buffer.trim()) {
+    consumeSSEBlock(buffer);
+  }
+}
+
 async function runComparison() {
   if (state.running) {
     return;
   }
+
+  clearLiveResults();
+  openTracePanels();
   state.running = true;
+  state.streamError = null;
+  state.streamProgress = { direct: false, trs: false };
+  state.activeModel = state.payload.models[state.modelId];
   nodes.runButton.disabled = true;
-  nodes.runButton.textContent = "Running...";
-  nodes.runStatus.textContent = "Calling the model twice on the server: first direct, then TRS with the archived skill card.";
+  nodes.runButton.textContent = "Streaming...";
+  setLaneStreaming("direct", true);
+  setLaneStreaming("trs", true);
+  seedReasoningPlaceholders();
+  updateRunStatus();
 
   try {
-    const response = await fetch("/api/run", {
+    const response = await fetch("/api/run_stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -192,23 +378,24 @@ async function runComparison() {
         modelId: state.modelId,
       }),
     });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || `Request failed with status ${response.status}`);
+
+    if (!response.ok) {
+      let errorMessage = `Request failed with status ${response.status}`;
+      try {
+        const payload = await response.json();
+        errorMessage = payload.error || errorMessage;
+      } catch {}
+      throw new Error(errorMessage);
     }
 
-    const live = payload.live;
-    nodes.runStatus.textContent = `${live.model.label} finished. Costs below use the paper pricing constants embedded in the demo.`;
-    renderLiveSummary(live.summary);
-    renderLiveMetrics(nodes.directMetrics, live.direct);
-    renderLiveMetrics(nodes.trsMetrics, live.trs);
-    nodes.directReasoning.textContent = live.direct.reasoning_text || "(No separate reasoning_content returned by the API.)";
-    nodes.trsReasoning.textContent = live.trs.reasoning_text || "(No separate reasoning_content returned by the API.)";
-    nodes.directAnswer.textContent = live.direct.answer_text;
-    nodes.trsAnswer.textContent = live.trs.answer_text;
-    typesetMath([nodes.directReasoning, nodes.trsReasoning, nodes.directAnswer, nodes.trsAnswer]);
+    await consumeEventStream(response);
+    if (state.streamError) {
+      throw new Error(state.streamError);
+    }
   } catch (error) {
     nodes.runStatus.textContent = `Live run failed: ${error.message}`;
+    setLaneStreaming("direct", false);
+    setLaneStreaming("trs", false);
   } finally {
     state.running = false;
     nodes.runButton.disabled = false;

@@ -37,7 +37,8 @@
             Pick one DeepMath example, switch between model families, and run a
             live direct-vs-TRS comparison. The page keeps the 360 API key on
             the server side while exposing the retrieved skill card, the live
-            reasoning trace, and the token/cost deltas.
+            reasoning trace when the API exposes it, the final answer stream,
+            correctness against the reference answer, and the token/cost deltas.
           </p>
         </div>
         <div class="hero-stats" id="heroStats">
@@ -114,7 +115,7 @@
           <section class="result-section">
             <div class="section-heading">
               <h3>Live Comparison</h3>
-              <p id="runStatus">
+              <p id="runStatus" aria-live="polite">
                 No live run yet. Press the button to query the model twice: once
                 with no skill prefix, and once with the archived TRS skill card.
               </p>
@@ -130,7 +131,7 @@
                 </div>
                 <div id="directMetrics" class="metrics-grid"></div>
                 <details class="trace-panel">
-                  <summary>Reasoning trace</summary>
+                  <summary>Reasoning trace (if exposed)</summary>
                   <pre id="directReasoning"></pre>
                 </details>
                 <details class="trace-panel">
@@ -146,7 +147,7 @@
                 </div>
                 <div id="trsMetrics" class="metrics-grid"></div>
                 <details class="trace-panel">
-                  <summary>Reasoning trace</summary>
+                  <summary>Reasoning trace (if exposed)</summary>
                   <pre id="trsReasoning"></pre>
                 </details>
                 <details class="trace-panel">

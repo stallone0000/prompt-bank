@@ -8,6 +8,7 @@
       "label": "Doubao Seed 1.8",
       "apiModel": "volcengine/doubao-seed-1-8",
       "promptStyle": "short",
+      "supportsReasoningTrace": true,
       "paperPricing": {
         "inputYuanPerMillion": 0.8,
         "outputYuanPerMillion": 2.0
@@ -17,9 +18,20 @@
       "label": "GPT-OSS-120B",
       "apiModel": "qiniu/gpt-oss-120b",
       "promptStyle": "cod",
+      "supportsReasoningTrace": false,
       "paperPricing": {
         "inputYuanPerMillion": 1.08,
         "outputYuanPerMillion": 5.4
+      }
+    },
+    "gemini": {
+      "label": "Gemini 3 Flash",
+      "apiModel": "cloudsway/gemini-3-flash-preview",
+      "promptStyle": "tryto",
+      "supportsReasoningTrace": false,
+      "paperPricing": {
+        "inputYuanPerMillion": 2.52,
+        "outputYuanPerMillion": 15.12
       }
     }
   },
@@ -76,6 +88,27 @@
             "estimatedTotalTokensSaved": 5156,
             "estimatedReasoningReductionPct": 71.83
           }
+        },
+        "gemini": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 1447,
+            "estimatedTotalTokens": 1447
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 1165,
+            "estimatedTotalTokens": 1165,
+            "skill_text": "1. When encountering a problem asking for the number of distinct terms in a multinomial expansion $(x^{a_1} + x^{a_2} + \\dots + x^{a_m})^n$, transform the problem into finding the set of all possible sums of $n$ integers chosen from the set of exponents $\\{a_1, a_2, \\dots, a_m\\}$. Be cautious of potential coefficient cancellations if the base terms have negative signs; if all coefficients are positive, every reachable sum corresponds to a distinct term.\n2. To determine the range of possible exponents, calculate the theoretical minimum ($n \\cdot \\min(a_i)$) and maximum ($n \\cdot \\max(a_i)$). If the set of base exponents contains values that allow for a \"unit step\" (e.g., if $a_j - a_i = 1$ for some $i, j$), it is highly likely that every integer within the range is reachable.\n3. Use parity analysis to identify \"gaps\" in the set of reachable sums. If all base exponents $a_i$ share the same parity, the sum of $n$ such exponents will have a fixed parity (depending on $n$), potentially skipping every other integer in the range.\n4. When the base set of exponents is symmetric (e.g., $\\{-2, -1, 1, 2\\}$), the resulting set of sums will also be symmetric around zero. This allows you to focus only on the non-negative range $[0, \\text{max}]$ and double the count (subtracting one for the overlapping zero).\n5. For complex sets of exponents, define the sum as a linear combination $k = \\sum c_i a_i$ subject to $\\sum c_i = n$. Test the \"reachability\" of the boundaries of the range and check if the \"step size\" between possible sums can be reduced to 1 by swapping one base exponent for another. Be cautious of small $n$ values where the constraints $\\sum c_i = n$ might prevent reaching certain intermediate values.",
+            "skill_score": 62.013
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 0,
+            "estimatedTotalTokensSaved": 282,
+            "estimatedReasoningReductionPct": 0.0
+          }
         }
       }
     },
@@ -130,6 +163,27 @@
             "estimatedReasoningTokensSaved": 3611,
             "estimatedTotalTokensSaved": 3824,
             "estimatedReasoningReductionPct": 54.64
+          }
+        },
+        "gemini": {
+          "direct": {
+            "verification": "INCORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 1506,
+            "estimatedTotalTokens": 1506
+          },
+          "trs": {
+            "verification": "INCORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 1395,
+            "estimatedTotalTokens": 1395,
+            "skill_text": "1. When encountering equations where different types of functions (e.g., trigonometric and exponential) are equated, perform a Range Analysis on both sides. If the maximum of one side equals the minimum of the other, the solution must occur at that specific boundary value.\n2. When observing expressions of the form $a^{f(x)} + a^{-f(x)}$, apply the AM-GM inequality ($t + 1/t \\ge 2$ for $t > 0$) to establish a lower bound. Be cautious of assuming the minimum is 2 if the domain of $f(x)$ is restricted such that $a^{f(x)}$ can never equal 1.\n3. For trigonometric terms like $A \\cos(g(x))$, use the property that the range is strictly bounded by $[-A, A]$. If the opposing side of the equation is shown to be $\\ge A$ or $\\le -A$, the problem simplifies from solving a general equation to solving the system where both sides equal the boundary constant.\n4. After identifying a candidate solution at a boundary point, verify the uniqueness of that point by checking the monotonicity or the second derivative of the bounding functions. If one side is strictly increasing/decreasing away from the boundary, no other solutions can exist.\n5. When solving for the argument of a periodic function at a boundary (e.g., $\\cos(\\theta) = 1$), remember that $\\theta = 2\\pi k$. Always substitute the candidate $x$ value back into the argument to ensure it aligns with an integer $k$.",
+            "skill_score": 52.554
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 0,
+            "estimatedTotalTokensSaved": 111,
+            "estimatedReasoningReductionPct": 0.0
           }
         }
       }
@@ -186,6 +240,27 @@
             "estimatedTotalTokensSaved": 54,
             "estimatedReasoningReductionPct": 17.77
           }
+        },
+        "gemini": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 827,
+            "estimatedTotalTokens": 827
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 581,
+            "estimatedTotalTokens": 581,
+            "skill_text": "1. When encountering an integral of the form $\\int e^{-r f(x)} dx$ where $r \\to \\infty$, adopt Laplace's Method by identifying the global minima of $f(x)$ within the integration interval because the integrand becomes sharply peaked at these points, and contributions from elsewhere become exponentially negligible. Be cautious of minima occurring at the boundaries, as this typically halves the resulting integral value compared to an interior minimum.\n2. When the exponent involves trigonometric functions near their roots, adopt a local Taylor expansion (e.g., $\\cos(\\theta) \\approx -(\\theta - \\pi/2)$ near $\\pi/2$) because this transforms the complex integrand into a standard Gaussian form $\\int e^{-ax^2} dx$. Be cautious of the order of the first non-zero derivative; if the first derivative is zero, you must use the second-order term.\n3. When evaluating the limit of a parameter-dependent integral, adopt a scaling analysis of the peak's width and height because if the peak width shrinks (e.g., $O(1/\\sqrt{r})$) while the height remains constant or grows slower than the width shrinks, the limit is likely zero. Be cautious of pre-exponential factors that might depend on $r$ and counteract the decay.\n4. When the integrand exhibits symmetry (e.g., $\\cos^2(\\theta)$ around $\\pi/2$), adopt interval splitting or doubling because it simplifies the bounds and allows you to focus on a single local minimum. Be cautious of missing multiple equivalent peaks within the original bounds, which would lead to an underestimation by a constant factor.\n5. When extending finite integration limits to $\\pm \\infty$ for asymptotic approximation, adopt the \"Tail Negligibility\" principle because as $r \\to \\infty$, the error introduced by the tails of the Gaussian approximation decays faster than the main contribution. Be cautious if the function $f(x)$ has other minima with the same value, as they must all be summed.",
+            "skill_score": 31.162
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 0,
+            "estimatedTotalTokensSaved": 246,
+            "estimatedReasoningReductionPct": 0.0
+          }
         }
       }
     },
@@ -240,6 +315,27 @@
             "estimatedReasoningTokensSaved": 3089,
             "estimatedTotalTokensSaved": 3178,
             "estimatedReasoningReductionPct": 65.27
+          }
+        },
+        "gemini": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 1705,
+            "estimatedTotalTokens": 1705
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 1664,
+            "estimatedTotalTokens": 1664,
+            "skill_text": "1. When solving for the circumsphere of a subset of vertices in a highly symmetric 3D object (like a regular tetrahedron), adopt a Coordinate Geometry approach because it transforms abstract geometric constraints into a solvable system of linear equations. Be cautious of choosing an origin that doesn't simplify the coordinates of the base or the height.\n2. When finding the center of a sphere passing through four points, equate the squared distances from an unknown center $(x, y, z)$ to each point. Subtracting these equations pairwise is a powerful strategy because the quadratic terms ($x^2, y^2, z^2$) cancel out, leaving a system of linear equations representing the intersection of perpendicular bisector planes.\n3. When calculating coordinates for a regular tetrahedron of edge length $a$, remember the standard height is $a\\sqrt{6}/3$ and the distance from a vertex to the centroid of the opposite face is $a\\sqrt{6}/3$. Using these constants prevents derivation errors during the setup phase.\n4. When a problem involves midpoints or centroids of previously defined points, calculate their coordinates as simple arithmetic means. This maintains the linear relationship between points and simplifies the subsequent distance equations.\n5. When asked for the \"surface area of the circumsphere,\" always solve for $R^2$ directly rather than $R$. Since the formula is $4\\pi R^2$, keeping the value in its squared form avoids unnecessary square root operations and potential radical simplification errors.",
+            "skill_score": 93.097
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 0,
+            "estimatedTotalTokensSaved": 41,
+            "estimatedReasoningReductionPct": 0.0
           }
         }
       }
@@ -296,6 +392,27 @@
             "estimatedTotalTokensSaved": 3148,
             "estimatedReasoningReductionPct": 79.47
           }
+        },
+        "gemini": {
+          "direct": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 954,
+            "estimatedTotalTokens": 954
+          },
+          "trs": {
+            "verification": "CORRECT",
+            "estimatedReasoningTokens": 0,
+            "estimatedAnswerTokens": 799,
+            "estimatedTotalTokens": 799,
+            "skill_text": "1. When encountering a sum of integrals involving a function and its inverse, adopt a geometric visualization of partitioning a rectangle because the sum represents the total area bounded by the axes and the coordinate $(a, f(a))$. Be cautious of non-zero lower bounds which necessitate subtracting a smaller inner rectangle.\n2. When evaluating the integral of an inverse function, adopt the substitution $y = f(x)$ because it transforms the integral into the domain of the original function, often revealing a structure solvable via integration by parts. Be cautious of functions that are not strictly monotonic, as the inverse may not be uniquely defined.\n3. When faced with an expression combining $\\int f(x) dx$ and $\\int x f'(x) dx$, adopt the reverse product rule (differentiation of $x \\cdot f(x)$) because it simplifies the sum into a single evaluation at the boundaries. Be cautious of potential discontinuities at the integration limits.",
+            "skill_score": 171.835
+          },
+          "summary": {
+            "estimatedReasoningTokensSaved": 0,
+            "estimatedTotalTokensSaved": 155,
+            "estimatedReasoningReductionPct": 0.0
+          }
         }
       }
     }
@@ -304,6 +421,8 @@
     "doubao_direct": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/acl_rebuttal_math_dual_20260326/data/doubao_eval_500_direct.jsonl",
     "doubao_trs": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/acl_rebuttal_math_dual_20260326/baseline_results/doubao_ours_full_500.jsonl",
     "oss_direct": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/acl_rebuttal_math_dual_20260326/data/oss_eval_500_direct.jsonl",
-    "oss_trs": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/acl_rebuttal_math_dual_20260326/baseline_results/oss_ours_full_500.jsonl"
+    "oss_trs": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/acl_rebuttal_math_dual_20260326/baseline_results/oss_ours_full_500.jsonl",
+    "gemini_direct": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/cot-bank/other-model/deepmath_1w_gemini3flash-qiniu.jsonl",
+    "gemini_trs": "/home/jovyan/zhaoguangxiang-data/shiqilong/prompt_bank/DeepMath-103K/cot-bank/other-model/deepmath_1w_gemini3flash-qiniu_oss_guided_tryto.jsonl"
   }
 }

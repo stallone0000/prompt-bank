@@ -292,10 +292,15 @@ body {
   font-size: 1.02rem;
 }
 
-.summary-grid,
-.live-summary {
+.summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.live-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -370,6 +375,26 @@ body {
   background: rgba(255, 255, 255, 0.66);
 }
 
+.metric.success {
+  background: rgba(216, 236, 232, 0.92);
+}
+
+.metric.success strong {
+  color: var(--ink);
+}
+
+.metric.warning {
+  background: rgba(243, 215, 201, 0.82);
+}
+
+.metric.warning strong {
+  color: #7f3717;
+}
+
+.metric.muted {
+  background: rgba(29, 39, 48, 0.05);
+}
+
 .metric strong {
   display: block;
   margin-top: 8px;
@@ -396,8 +421,27 @@ body {
   font-size: 0.93rem;
 }
 
+.trace-panel pre.streaming::after {
+  content: "▋";
+  margin-left: 2px;
+  color: var(--accent);
+  animation: blink 1s steps(2, end) infinite;
+}
+
 .hidden {
   display: none;
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+
+  50%,
+  100% {
+    opacity: 0;
+  }
 }
 
 @media (max-width: 1180px) {

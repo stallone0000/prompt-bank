@@ -24,6 +24,8 @@ FILES = {
     "doubao_trs": WORKSPACE_ROOT / "DeepMath-103K" / "acl_rebuttal_math_dual_20260326" / "baseline_results" / "doubao_ours_full_500.jsonl",
     "oss_direct": WORKSPACE_ROOT / "DeepMath-103K" / "acl_rebuttal_math_dual_20260326" / "data" / "oss_eval_500_direct.jsonl",
     "oss_trs": WORKSPACE_ROOT / "DeepMath-103K" / "acl_rebuttal_math_dual_20260326" / "baseline_results" / "oss_ours_full_500.jsonl",
+    "gemini_direct": WORKSPACE_ROOT / "DeepMath-103K" / "cot-bank" / "other-model" / "deepmath_1w_gemini3flash-qiniu.jsonl",
+    "gemini_trs": WORKSPACE_ROOT / "DeepMath-103K" / "cot-bank" / "other-model" / "deepmath_1w_gemini3flash-qiniu_oss_guided_tryto.jsonl",
 }
 
 SELECTED = [
@@ -69,6 +71,7 @@ MODEL_META = {
         "label": "Doubao Seed 1.8",
         "apiModel": "volcengine/doubao-seed-1-8",
         "promptStyle": "short",
+        "supportsReasoningTrace": True,
         "paperPricing": {
             "inputYuanPerMillion": 0.8,
             "outputYuanPerMillion": 2.0,
@@ -78,9 +81,20 @@ MODEL_META = {
         "label": "GPT-OSS-120B",
         "apiModel": "qiniu/gpt-oss-120b",
         "promptStyle": "cod",
+        "supportsReasoningTrace": False,
         "paperPricing": {
             "inputYuanPerMillion": 1.08,
             "outputYuanPerMillion": 5.4,
+        },
+    },
+    "gemini": {
+        "label": "Gemini 3 Flash",
+        "apiModel": "cloudsway/gemini-3-flash-preview",
+        "promptStyle": "tryto",
+        "supportsReasoningTrace": False,
+        "paperPricing": {
+            "inputYuanPerMillion": 2.52,
+            "outputYuanPerMillion": 15.12,
         },
     },
 }
@@ -150,6 +164,8 @@ def main() -> None:
         trs_doubao = loaded["doubao_trs"][qid]
         direct_oss = loaded["oss_direct"][qid]
         trs_oss = loaded["oss_trs"][qid]
+        direct_gemini = loaded["gemini_direct"][qid]
+        trs_gemini = loaded["gemini_trs"][qid]
 
         examples.append(
             {
@@ -165,6 +181,7 @@ def main() -> None:
                 "archived": {
                     "doubao": build_model_archive(direct_doubao, trs_doubao),
                     "oss": build_model_archive(direct_oss, trs_oss),
+                    "gemini": build_model_archive(direct_gemini, trs_gemini),
                 },
             }
         )
