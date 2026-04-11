@@ -129,7 +129,7 @@ function laneNodes(lane) {
 
 function setLaneStreaming(lane, enabled) {
   const laneNode = laneNodes(lane);
-  const supportsReasoning = state.activeModel?.supportsReasoningTrace;
+  const supportsReasoning = state.activeModel?.showsReasoningTrace;
   laneNode.answer.classList.toggle("streaming", enabled);
   laneNode.reasoning.classList.toggle("streaming", enabled && supportsReasoning);
 }
@@ -228,7 +228,11 @@ function openTracePanels() {
 }
 
 function seedReasoningPlaceholders() {
-  if (state.activeModel?.supportsReasoningTrace) {
+  if (state.activeModel?.showsReasoningTrace) {
+    if (state.activeModel?.fallbackReasoningFromContent) {
+      nodes.directAnswer.textContent = "(Extracting final answer from the model output...)";
+      nodes.trsAnswer.textContent = "(Extracting final answer from the model output...)";
+    }
     return;
   }
   const note = "(This model does not expose a separate reasoning trace on the current 360 API route.)";
@@ -259,7 +263,7 @@ function finalizeLaneResult(lane, result) {
   renderLiveMetrics(laneNode.metrics, result);
   laneNode.reasoning.textContent =
     result.reasoning_text ||
-    (state.activeModel?.supportsReasoningTrace
+    (state.activeModel?.showsReasoningTrace
       ? "(The API did not return a separate reasoning trace.)"
       : "(This model does not expose a separate reasoning trace on the current 360 API route.)");
   laneNode.answer.textContent = result.answer_text || "(No final answer returned.)";

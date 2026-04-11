@@ -58,6 +58,7 @@ class ModelConfig:
     input_price_yuan_per_million: float
     output_price_yuan_per_million: float
     supports_reasoning_trace: bool
+    fallback_reasoning_from_content: bool
 
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
@@ -69,6 +70,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=0.8,
         output_price_yuan_per_million=2.0,
         supports_reasoning_trace=True,
+        fallback_reasoning_from_content=False,
     ),
     "oss": ModelConfig(
         model_id="oss",
@@ -78,6 +80,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=1.08,
         output_price_yuan_per_million=5.4,
         supports_reasoning_trace=False,
+        fallback_reasoning_from_content=True,
     ),
     "gemini": ModelConfig(
         model_id="gemini",
@@ -87,6 +90,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=2.52,
         output_price_yuan_per_million=15.12,
         supports_reasoning_trace=False,
+        fallback_reasoning_from_content=False,
     ),
 }
 
@@ -105,6 +109,8 @@ def load_examples_payload() -> Dict[str, Any]:
             "label": config.label,
             "apiModel": config.api_model,
             "supportsReasoningTrace": config.supports_reasoning_trace,
+            "fallbackReasoningFromContent": config.fallback_reasoning_from_content,
+            "showsReasoningTrace": config.supports_reasoning_trace or config.fallback_reasoning_from_content,
             "paperPricing": {
                 "inputYuanPerMillion": config.input_price_yuan_per_million,
                 "outputYuanPerMillion": config.output_price_yuan_per_million,
@@ -268,6 +274,13 @@ def evaluate_correctness(answer_text: str, reference_answer: str) -> Dict[str, s
     }
 
 
+def looks_like_reasoning_trace(text: str) -> bool:
+    cleaned = clean_answer_text(text)
+    if len(cleaned) >= 180:
+        return True
+    return any(marker in text for marker in ["\n\n", "###", "Step ", "Thus", "Therefore", "所以", "因此"])
+
+
 def build_result(
     prompt_text: str,
     config: ModelConfig,
@@ -276,6 +289,18 @@ def build_result(
     usage: Dict[str, Any],
     reference_answer: str,
 ) -> Dict[str, Any]:
+    raw_answer_text = answer_text
+    correctness = evaluate_correctness(raw_answer_text, reference_answer)
+    display_reasoning_text = reasoning_text
+    display_answer_text = raw_answer_text
+    if (
+        not display_reasoning_text
+        and config.fallback_reasoning_from_content
+        and looks_like_reasoning_trace(raw_answer_text)
+    ):
+        display_reasoning_text = raw_answer_text
+        display_answer_text = correctness["extracted_answer"] or raw_answer_text
+
     prompt_tokens = int(usage.get("prompt_tokens") or estimate_tokens(prompt_text))
     completion_tokens = int(usage.get("completion_tokens") or estimate_tokens(reasoning_text + "\n" + answer_text))
     total_tokens = int(usage.get("total_tokens") or prompt_tokens + completion_tokens)
@@ -284,8 +309,9 @@ def build_result(
     )
 
     return {
-        "reasoning_text": reasoning_text,
-        "answer_text": answer_text,
+        "reasoning_text": display_reasoning_text,
+        "answer_text": display_answer_text,
+        "raw_answer_text": raw_answer_text,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
@@ -293,7 +319,7 @@ def build_result(
         "estimated_reasoning_tokens": estimate_tokens(reasoning_text),
         "estimated_answer_tokens": estimate_tokens(answer_text),
         "cost_yuan": round(compute_cost_yuan(prompt_tokens, completion_tokens, config), 6),
-        "correctness": evaluate_correctness(answer_text, reference_answer),
+        "correctness": correctness,
     }
 
 
@@ -321,6 +347,8 @@ def model_payload(config: ModelConfig) -> Dict[str, Any]:
         "label": config.label,
         "apiModel": config.api_model,
         "supportsReasoningTrace": config.supports_reasoning_trace,
+        "fallbackReasoningFromContent": config.fallback_reasoning_from_content,
+        "showsReasoningTrace": config.supports_reasoning_trace or config.fallback_reasoning_from_content,
         "paperPricing": {
             "inputYuanPerMillion": config.input_price_yuan_per_million,
             "outputYuanPerMillion": config.output_price_yuan_per_million,
@@ -389,7 +417,7 @@ def stream_model(
                     on_delta("reasoning", reasoning_piece)
                 if answer_piece:
                     answer_parts.append(answer_piece)
-                    on_delta("answer", answer_piece)
+                    on_delta("reasoning" if config.fallback_reasoning_from_content else "answer", answer_piece)
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
