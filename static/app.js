@@ -159,13 +159,13 @@ function seedLanePlaceholders(lane, retry = false) {
   const laneNode = laneNodes(lane);
   const answerPlaceholder = retry
     ? "(Retrying after a transient API error...)"
-    : "(Waiting for the full response...)";
+    : "(Waiting for the response...)";
   laneNode.answer.textContent = answerPlaceholder;
   laneNode.reasoning.textContent = state.activeModel?.showsReasoningTrace
     ? retry
-      ? "(Retrying. The reasoning trace will restart if the model returns one.)"
-      : "(Waiting for the reasoning trace...)"
-    : "(This model does not return a separate reasoning trace.)";
+      ? "(Retrying. The chain of thought will restart if the model returns one.)"
+      : "(Waiting for the chain of thought...)"
+    : "(This model does not return a separate chain of thought.)";
 }
 
 function clearLiveResults() {
@@ -191,7 +191,7 @@ function renderLiveMetrics(container, result) {
   container.innerHTML = "";
   container.append(
     metricRow("Input tokens", formatMaybeNumber(result.prompt_tokens)),
-    metricRow("Output tokens", formatMaybeNumber(result.completion_tokens), "accent"),
+    metricRow("Output tokens (CoT + response)", formatMaybeNumber(result.completion_tokens), "accent"),
     metricRow("Cost (input + output pricing)", formatMaybeYuan(result.cost_yuan)),
     metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
     metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status))
@@ -261,7 +261,7 @@ function updateRunStatus() {
     return;
   }
   if (doneCount === 0) {
-    nodes.runStatus.textContent = "Streaming both runs. Reasoning and full responses will appear as chunks arrive.";
+    nodes.runStatus.textContent = "Streaming both runs. Chain of thought and response will appear as chunks arrive.";
     return;
   }
   if (doneCount === 1) {
@@ -279,8 +279,8 @@ function finalizeLaneResult(lane, result) {
   laneNode.reasoning.textContent =
     result.reasoning_text ||
     (state.activeModel?.showsReasoningTrace
-      ? "(The API did not return a separate reasoning trace.)"
-      : "(This model does not return a separate reasoning trace.)");
+      ? "(The API did not return a separate chain of thought.)"
+      : "(This model does not return a separate chain of thought.)");
   laneNode.answer.textContent = result.answer_text || "(No response returned.)";
   setLaneStreaming(lane, false);
   typesetMath([laneNode.reasoning, laneNode.answer]);
