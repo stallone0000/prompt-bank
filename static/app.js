@@ -91,9 +91,8 @@ function renderExamples() {
   state.payload.examples.forEach((example) => {
     const fragment = nodes.template.content.cloneNode(true);
     const button = fragment.querySelector(".example-card");
-    fragment.querySelector(".example-kicker").textContent = example.subtitle;
+    fragment.querySelector(".example-kicker").textContent = `${example.topic.split(" -> ").slice(-1)[0]} · D${example.difficulty}`;
     fragment.querySelector(".example-title").textContent = example.title;
-    fragment.querySelector(".example-highlight").textContent = example.highlight;
     if (example.id === state.exampleId) {
       button.classList.add("active");
     }
@@ -173,8 +172,7 @@ function clearLiveResults() {
   nodes.liveSummary.classList.add("hidden");
   nodes.liveSummary.innerHTML = "";
   resetLanePanels();
-  nodes.runStatus.textContent =
-    "No live run yet. Press the button to query the model twice: once with no skill prefix, and once with the archived TRS skill card.";
+  nodes.runStatus.textContent = "Press run to compare direct prompting against TRS on the selected problem.";
 }
 
 function metricRow(label, value, tone = "") {
@@ -192,12 +190,11 @@ function renderLiveMetrics(container, result) {
   const correctness = result.correctness || {};
   container.innerHTML = "";
   container.append(
-    metricRow("Prompt tokens", formatMaybeNumber(result.prompt_tokens)),
-    metricRow("Completion tokens (CoT + response)", formatMaybeNumber(result.completion_tokens)),
+    metricRow("Input tokens", formatMaybeNumber(result.prompt_tokens)),
+    metricRow("Output tokens", formatMaybeNumber(result.completion_tokens), "accent"),
     metricRow("Total tokens", formatMaybeNumber(result.total_tokens)),
-    metricRow("Paper-priced cost", formatMaybeYuan(result.cost_yuan)),
+    metricRow("Cost (input + output pricing)", formatMaybeYuan(result.cost_yuan)),
     metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
-    metricRow("Verifier model", correctness.verifier_model || "—", "muted"),
     metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status))
   );
 }
@@ -217,11 +214,11 @@ function renderLiveSummary(summary) {
   nodes.liveSummary.innerHTML = "";
   const cards = [
     {
-      label: "Completion Tokens Saved",
+      label: "Output Tokens Saved",
       value: formatMaybeNumber(summary.completion_tokens_saved),
     },
     {
-      label: "Completion Reduction",
+      label: "Output Reduction",
       value: formatMaybeReductionPercent(summary.completion_reduction_pct),
     },
     {
@@ -269,7 +266,7 @@ function updateRunStatus() {
     return;
   }
   if (doneCount === 0) {
-    nodes.runStatus.textContent = "Streaming direct and TRS runs from the server. Reasoning and answers will appear as chunks arrive.";
+    nodes.runStatus.textContent = "Streaming both runs. Reasoning and full responses will appear as chunks arrive.";
     return;
   }
   if (doneCount === 1) {
@@ -278,7 +275,7 @@ function updateRunStatus() {
     nodes.runStatus.textContent = `${finishedLane} finished. ${waitingLane} is still streaming.`;
     return;
   }
-  nodes.runStatus.textContent = `${state.activeModel.label} finished. Costs below use the paper pricing constants embedded in the demo.`;
+  nodes.runStatus.textContent = `${state.activeModel.label} finished. Costs use the paper's input and output token pricing.`;
 }
 
 function finalizeLaneResult(lane, result) {

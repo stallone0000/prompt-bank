@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
@@ -31,20 +31,25 @@
     <div class="page-shell">
       <header class="topbar">
         <div class="topbar-copy">
-          <span class="topbar-kicker">DeepMath Live Demo</span>
           <h1>Thinking with Reasoning Skills: Fewer Tokens, More Accuracy</h1>
         </div>
         <div class="topbar-meta">
-          <span class="topbar-chip">Direct vs TRS</span>
-          <span class="topbar-chip subtle">Long-CoT Showcase</span>
+          <a
+            class="topbar-link"
+            href="https://huggingface.co/datasets/zwhe99/DeepMath-103K"
+            target="_blank"
+            rel="noreferrer"
+          >
+            DeepMath-103K
+          </a>
+          <span class="topbar-chip subtle">Direct vs TRS</span>
         </div>
       </header>
 
       <main class="workspace">
         <aside class="sidebar">
           <div class="sidebar-head">
-            <h2>Running Examples</h2>
-            <p>Curated DeepMath cases with long original reasoning and strong TRS compression.</p>
+            <h2>Problem</h2>
           </div>
           <div id="exampleList" class="example-list"></div>
         </aside>
@@ -75,23 +80,18 @@
                 <strong id="referenceAnswer"></strong>
               </div>
             </article>
-
-            <aside class="skill-panel">
-              <div class="section-heading compact">
-                <h3>Retrieved Skill Card</h3>
-                <p>The archived skill is prefixed only in the TRS run.</p>
-              </div>
-              <pre id="skillCard" class="skill-card"></pre>
-            </aside>
           </section>
+
+          <details class="skill-panel collapse-panel">
+            <summary>Retrieved Skill Card</summary>
+            <pre id="skillCard" class="skill-card"></pre>
+          </details>
 
           <section class="comparison-panel">
             <div class="section-heading">
               <h3>Live Comparison</h3>
               <p id="runStatus" aria-live="polite">
-                No live run yet. Press the button to query the model twice:
-                once with no skill prefix, and once with the archived TRS skill
-                card.
+                Press run to compare direct prompting against TRS on the selected problem.
               </p>
             </div>
 
@@ -139,7 +139,6 @@
       <button class="example-card">
         <span class="example-kicker"></span>
         <strong class="example-title"></strong>
-        <span class="example-highlight"></span>
       </button>
     </template>
 
