@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
@@ -29,63 +29,95 @@
   </head>
   <body>
     <div class="page-shell">
-      <header class="topbar">
-        <div class="topbar-copy">
-          <span class="topbar-kicker">DeepMath Live Demo</span>
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">DeepMath Live Demo</p>
           <h1>Thinking with Reasoning Skills: Fewer Tokens, More Accuracy</h1>
+          <p class="hero-text">
+            Select one DeepMath problem, switch models, and run a live
+            direct-versus-TRS comparison. The page shows the retrieved skill,
+            the full reasoning trace when the model exposes one, the full
+            response stream, verifier-based correctness, and live token and
+            cost deltas from the current API usage fields.
+          </p>
         </div>
-        <div class="topbar-meta">
-          <span class="topbar-chip">Direct vs TRS</span>
-          <span class="topbar-chip subtle">Long-CoT Showcase</span>
+        <div class="hero-stats" id="heroStats">
+          <div class="hero-card">
+            <span>Dataset</span>
+            <strong>DeepMath</strong>
+          </div>
+          <div class="hero-card">
+            <span>Scope</span>
+            <strong>Curated Long-CoT Cases</strong>
+          </div>
+          <div class="hero-card">
+            <span>Mode</span>
+            <strong>Direct vs TRS</strong>
+          </div>
         </div>
       </header>
 
-      <main class="workspace">
-        <aside class="sidebar">
-          <div class="sidebar-head">
-            <h2>Running Examples</h2>
-            <p>Curated DeepMath cases with long original reasoning and strong TRS compression.</p>
+      <main class="layout">
+        <aside class="examples-panel">
+          <div class="panel-heading">
+            <h2>Selected Problems</h2>
+            <p>Examples with very long original direct reasoning and strong TRS compression.</p>
           </div>
           <div id="exampleList" class="example-list"></div>
         </aside>
 
-        <section class="stage">
-          <div class="control-bar">
+        <section class="main-panel">
+          <div class="controls">
             <div class="model-toggle" id="modelToggle"></div>
-            <div class="control-actions">
-              <div class="verifier-card">
-                <span>Verifier Model</span>
-                <strong id="verifierModel">-</strong>
-              </div>
-              <button id="runButton" class="run-button">Run Live Comparison</button>
-            </div>
+            <button id="runButton" class="run-button">Run Live Comparison</button>
           </div>
 
-          <section class="context-grid">
-            <article class="question-panel">
-              <div class="question-topline">
-                <span class="badge" id="topicBadge"></span>
-                <span class="badge subtle" id="difficultyBadge"></span>
-              </div>
-              <h2 id="questionTitle"></h2>
-              <p id="questionSubtitle" class="question-subtitle"></p>
-              <div id="questionText" class="question-text"></div>
-              <div class="answer-strip">
-                <span>Reference answer</span>
-                <strong id="referenceAnswer"></strong>
-              </div>
-            </article>
+          <article class="question-card">
+            <div class="question-topline">
+              <span class="badge" id="topicBadge"></span>
+              <span class="badge subtle" id="difficultyBadge"></span>
+            </div>
+            <h2 id="questionTitle"></h2>
+            <p id="questionSubtitle" class="question-subtitle"></p>
+            <div id="questionText" class="question-text"></div>
+            <div class="answer-strip">
+              <span>Reference answer</span>
+              <strong id="referenceAnswer"></strong>
+            </div>
+          </article>
 
-            <aside class="skill-panel">
-              <div class="section-heading compact">
-                <h3>Retrieved Skill Card</h3>
-                <p>The archived skill is prefixed only in the TRS run.</p>
-              </div>
-              <pre id="skillCard" class="skill-card"></pre>
-            </aside>
+          <section class="summary-grid">
+            <div class="summary-card warm">
+              <span>Curation</span>
+              <strong id="selectionRule">-</strong>
+            </div>
+            <div class="summary-card">
+              <span>Live Token Fields</span>
+              <strong id="tokenFields">-</strong>
+            </div>
+            <div class="summary-card">
+              <span>Verifier Model</span>
+              <strong id="verifierModel">-</strong>
+            </div>
+            <div class="summary-card">
+              <span>Retrieved Skill Score</span>
+              <strong id="archivedSkillScore">-</strong>
+            </div>
           </section>
 
-          <section class="comparison-panel">
+          <section class="skill-section">
+            <div class="section-heading">
+              <h3>Retrieved Skill Card</h3>
+              <p>
+                This archived full-library skill card is prefixed to the live
+                TRS run. The retrieval score is archived; all token and
+                correctness metrics below come from the current live calls.
+              </p>
+            </div>
+            <pre id="skillCard" class="skill-card"></pre>
+          </section>
+
+          <section class="result-section">
             <div class="section-heading">
               <h3>Live Comparison</h3>
               <p id="runStatus" aria-live="polite">
@@ -145,4 +177,4 @@
 
     <script src="/app.js"></script>
   </body>
-</html>
+  </html>

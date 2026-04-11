@@ -25,7 +25,10 @@ const nodes = {
   questionSubtitle: document.getElementById("questionSubtitle"),
   questionText: document.getElementById("questionText"),
   referenceAnswer: document.getElementById("referenceAnswer"),
+  selectionRule: document.getElementById("selectionRule"),
+  tokenFields: document.getElementById("tokenFields"),
   verifierModel: document.getElementById("verifierModel"),
+  archivedSkillScore: document.getElementById("archivedSkillScore"),
   skillCard: document.getElementById("skillCard"),
   runStatus: document.getElementById("runStatus"),
   liveSummary: document.getElementById("liveSummary"),
@@ -120,7 +123,10 @@ function renderSelection() {
   nodes.questionSubtitle.textContent = example.subtitle;
   nodes.questionText.textContent = example.question;
   nodes.referenceAnswer.textContent = example.answer;
+  nodes.selectionRule.textContent = state.payload.selectionRule || "Long-CoT rebuttal curation";
+  nodes.tokenFields.textContent = (state.payload.tokenUsageFields || []).join(" • ");
   nodes.verifierModel.textContent = state.payload.verifier?.model || "openai/gpt-5-mini";
+  nodes.archivedSkillScore.textContent = archived.trs.skill_score.toFixed(3);
   nodes.skillCard.textContent = archived.trs.skill_text;
   typesetMath([nodes.questionText, nodes.referenceAnswer, nodes.skillCard]);
 }
