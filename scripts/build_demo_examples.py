@@ -30,18 +30,25 @@ FILES = {
 
 SELECTED = [
     {
-        "id": "laurent-terms",
-        "question_id": "q_66084",
-        "title": "Counting Distinct Terms",
-        "subtitle": "Laurent polynomial expansion",
-        "highlight": "A short skill card collapses a long expansion search into an exponent-range argument.",
+        "id": "bisector-angle",
+        "question_id": "q_93953",
+        "title": "A Nested-Bisector Geometry Trap",
+        "subtitle": "Parallel lines and angle chasing",
+        "highlight": "Direct CoT wanders for a long time; TRS retrieves the exact bisector-geometry shortcut.",
     },
     {
-        "id": "root-count",
-        "question_id": "q_33616",
-        "title": "How Many Roots?",
-        "subtitle": "Range analysis beats brute force",
-        "highlight": "TRS retrieves the exact AM-GM plus range-analysis trick instead of letting the model wander.",
+        "id": "random-walk-bound",
+        "question_id": "q_75171",
+        "title": "Random Walk Maximum",
+        "subtitle": "Asymptotic probability bound",
+        "highlight": "The retrieved skill steers the model toward the right large-deviation viewpoint instead of ad hoc casework.",
+    },
+    {
+        "id": "arctan-cubic-limit",
+        "question_id": "q_34165",
+        "title": "A Cubic-Order Arctan Limit",
+        "subtitle": "High-order asymptotic cancellation",
+        "highlight": "TRS points the model straight at the right expansion order, avoiding a long symbolic detour.",
     },
     {
         "id": "laplace-limit",
@@ -51,18 +58,11 @@ SELECTED = [
         "highlight": "The retrieved skill points directly at boundary minima and Laplace's method.",
     },
     {
-        "id": "tetrahedron-volume",
-        "question_id": "q_85512",
-        "title": "Sphere-Inscribed Tetrahedron",
-        "subtitle": "3D geometry with a relevant coordinate trick",
-        "highlight": "The retrieved card turns the geometry into a compact coordinate setup.",
-    },
-    {
-        "id": "inverse-integral",
-        "question_id": "q_22478",
-        "title": "Integral of a Function and Its Inverse",
-        "subtitle": "Geometric decomposition",
-        "highlight": "TRS recalls the classic area identity between a function and its inverse.",
+        "id": "laurent-terms",
+        "question_id": "q_66084",
+        "title": "Counting Distinct Terms",
+        "subtitle": "Laurent polynomial expansion",
+        "highlight": "A short skill card collapses a long expansion search into an exponent-range argument.",
     },
 ]
 
@@ -118,13 +118,31 @@ def estimate_tokens(text: str) -> int:
 
 
 def build_model_archive(direct_item: Dict, trs_item: Dict) -> Dict:
-    direct_reasoning_tokens = estimate_tokens(direct_item.get("model_think", ""))
-    direct_answer_tokens = estimate_tokens(direct_item.get("model_response", ""))
-    trs_reasoning_tokens = estimate_tokens(trs_item.get("heuristic_model_think", ""))
-    trs_answer_tokens = estimate_tokens(trs_item.get("heuristic_model_response", ""))
+    direct_answer_est = estimate_tokens(direct_item.get("model_response", ""))
+    trs_answer_est = estimate_tokens(trs_item.get("heuristic_model_response", ""))
+    direct_completion = int(direct_item.get("completion_tokens") or 0)
+    direct_prompt = int(direct_item.get("prompt_tokens") or 0)
+    trs_completion = int(trs_item.get("heuristic_completion_tokens") or 0)
+    trs_prompt = int(trs_item.get("heuristic_prompt_tokens") or 0)
 
-    direct_total = direct_reasoning_tokens + direct_answer_tokens
-    trs_total = trs_reasoning_tokens + trs_answer_tokens
+    if direct_completion:
+        direct_answer_tokens = min(direct_completion, direct_answer_est)
+        direct_reasoning_tokens = max(0, direct_completion - direct_answer_tokens)
+        direct_total = direct_prompt + direct_completion if direct_prompt else direct_completion
+    else:
+        direct_reasoning_tokens = estimate_tokens(direct_item.get("model_think", ""))
+        direct_answer_tokens = direct_answer_est
+        direct_total = direct_reasoning_tokens + direct_answer_tokens
+
+    if trs_completion:
+        trs_answer_tokens = min(trs_completion, trs_answer_est)
+        trs_reasoning_tokens = max(0, trs_completion - trs_answer_tokens)
+        trs_total = trs_prompt + trs_completion if trs_prompt else trs_completion
+    else:
+        trs_reasoning_tokens = estimate_tokens(trs_item.get("heuristic_model_think", ""))
+        trs_answer_tokens = trs_answer_est
+        trs_total = trs_reasoning_tokens + trs_answer_tokens
+
     reasoning_saved = direct_reasoning_tokens - trs_reasoning_tokens
     total_saved = direct_total - trs_total
     reasoning_reduction_pct = 0.0

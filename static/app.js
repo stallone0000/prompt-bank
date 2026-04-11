@@ -165,12 +165,18 @@ function metricRow(label, value, tone = "") {
 
 function renderLiveMetrics(container, result) {
   const correctness = result.correctness || {};
+  const reasoningLabel =
+    result.reasoning_token_source === "api_reasoning_tokens"
+      ? "CoT tokens (API)"
+      : result.reasoning_token_source === "api_completion_minus_estimated_answer"
+        ? "CoT tokens (API-derived)"
+        : "CoT tokens (estimated)";
   container.innerHTML = "";
   container.append(
     metricRow("Prompt tokens", formatNumber(result.prompt_tokens)),
     metricRow("Completion tokens", formatNumber(result.completion_tokens)),
     metricRow("Total tokens", formatNumber(result.total_tokens)),
-    metricRow("Estimated CoT tokens", formatNumber(result.estimated_reasoning_tokens)),
+    metricRow(reasoningLabel, formatNumber(result.reasoning_tokens)),
     metricRow("Paper-priced cost", formatYuan(result.cost_yuan)),
     metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
     metricRow("Extracted answer", correctness.extracted_answer || "—", "muted"),
@@ -193,11 +199,11 @@ function renderLiveSummary(summary) {
   nodes.liveSummary.innerHTML = "";
   const cards = [
     {
-      label: "Estimated CoT Saved",
+      label: "CoT Tokens Saved",
       value: formatNumber(summary.estimated_reasoning_tokens_saved),
     },
     {
-      label: "Estimated CoT Reduction",
+      label: "CoT Reduction",
       value: formatReductionPercent(summary.estimated_reasoning_reduction_pct),
     },
     {
@@ -289,27 +295,27 @@ function handleStreamEvent(eventName, payload) {
       state.activeModel = payload.model;
       seedReasoningPlaceholders();
       updateRunStatus();
-      return;
+      return false;
     case "lane_status":
-      return;
+      return false;
     case "lane_delta":
       appendLaneDelta(payload.lane, payload.kind, payload.text);
-      return;
+      return false;
     case "lane_result":
       state.streamProgress[payload.lane] = true;
       finalizeLaneResult(payload.lane, payload.result);
       updateRunStatus();
-      return;
+      return false;
     case "summary":
       renderLiveSummary(payload.summary);
-      return;
+      return false;
     case "error":
       state.streamError = payload.error || "Unknown stream error";
-      return;
+      return false;
     case "done":
-      return;
+      return true;
     default:
-      return;
+      return false;
   }
 }
 
@@ -320,21 +326,22 @@ function consumeSSEBlock(block) {
     if (line.startsWith("event:")) {
       eventName = line.slice(6).trim();
     } else if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).trimStart());
+      dataLines.push(line.startsWith("data: ") ? line.slice(6) : line.slice(5));
     }
   });
   if (!dataLines.length) {
-    return;
+    return false;
   }
-  handleStreamEvent(eventName, JSON.parse(dataLines.join("\n")));
+  return handleStreamEvent(eventName, JSON.parse(dataLines.join("\n")));
 }
 
 async function consumeEventStream(response) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let streamComplete = false;
 
-  while (true) {
+  while (!streamComplete) {
     const { value, done } = await reader.read();
     if (done) {
       buffer += decoder.decode();
@@ -345,12 +352,16 @@ async function consumeEventStream(response) {
     while (boundary !== -1) {
       const block = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
-      consumeSSEBlock(block);
+      streamComplete = consumeSSEBlock(block) || streamComplete;
+      if (streamComplete) {
+        await reader.cancel();
+        break;
+      }
       boundary = buffer.indexOf("\n\n");
     }
   }
 
-  if (buffer.trim()) {
+  if (!streamComplete && buffer.trim()) {
     consumeSSEBlock(buffer);
   }
 }

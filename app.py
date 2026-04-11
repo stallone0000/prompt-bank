@@ -307,6 +307,19 @@ def build_result(
     reported_reasoning_tokens = int(
         (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
     )
+    answer_tokens_estimate = estimate_tokens(display_answer_text or raw_answer_text)
+    reasoning_token_source = "text_estimate"
+    reasoning_tokens = estimate_tokens(display_reasoning_text or reasoning_text)
+    answer_tokens = answer_tokens_estimate
+
+    if reported_reasoning_tokens > 0:
+        reasoning_tokens = reported_reasoning_tokens
+        answer_tokens = max(0, completion_tokens - reported_reasoning_tokens)
+        reasoning_token_source = "api_reasoning_tokens"
+    elif config.fallback_reasoning_from_content and completion_tokens > 0:
+        answer_tokens = min(completion_tokens, answer_tokens_estimate)
+        reasoning_tokens = max(0, completion_tokens - answer_tokens)
+        reasoning_token_source = "api_completion_minus_estimated_answer"
 
     return {
         "reasoning_text": display_reasoning_text,
@@ -316,21 +329,24 @@ def build_result(
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
         "reported_reasoning_tokens": reported_reasoning_tokens,
-        "estimated_reasoning_tokens": estimate_tokens(reasoning_text),
-        "estimated_answer_tokens": estimate_tokens(answer_text),
+        "reasoning_tokens": reasoning_tokens,
+        "answer_tokens": answer_tokens,
+        "reasoning_token_source": reasoning_token_source,
+        "estimated_reasoning_tokens": reasoning_tokens,
+        "estimated_answer_tokens": answer_tokens,
         "cost_yuan": round(compute_cost_yuan(prompt_tokens, completion_tokens, config), 6),
         "correctness": correctness,
     }
 
 
 def compute_live_summary(direct: Dict[str, Any], trs: Dict[str, Any]) -> Dict[str, Any]:
-    reasoning_saved = direct["estimated_reasoning_tokens"] - trs["estimated_reasoning_tokens"]
+    reasoning_saved = direct["reasoning_tokens"] - trs["reasoning_tokens"]
     total_saved = direct["total_tokens"] - trs["total_tokens"]
     cost_saved = round(direct["cost_yuan"] - trs["cost_yuan"], 6)
     reasoning_reduction_pct = 0.0
-    if direct["estimated_reasoning_tokens"] > 0:
+    if direct["reasoning_tokens"] > 0:
         reasoning_reduction_pct = round(
-            reasoning_saved / direct["estimated_reasoning_tokens"] * 100,
+            reasoning_saved / direct["reasoning_tokens"] * 100,
             2,
         )
     return {
@@ -482,7 +498,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Connection", "keep-alive")
+        self.send_header("Connection", "close")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
@@ -603,6 +619,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
                     },
                 )
             self._send_sse_event("done", {"ok": not failures})
+            self.close_connection = True
         except BrokenPipeError:
             return
 
