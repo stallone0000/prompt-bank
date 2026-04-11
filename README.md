@@ -99,9 +99,11 @@ docker run -p 8080:8080 -e TRS_DEMO_API_KEY="your-360-api-key" trs-demo
 
 - deploy the repo root with the included `Dockerfile`
 - `render.yaml` is already included for Render Blueprint deploys
+- the included blueprint targets the `main` branch and defaults to Render's `free` plan
 - set `TRS_DEMO_API_KEY` in the platform dashboard
 - set `TRS_DEMO_PROXY_URL` only if the deployment environment actually needs it
 - if the platform needs a health check path, use `/api/health`
+- switch the plan to `starter` later if you want to avoid free-tier sleep / cold starts
 
 ## Fastest public deployment
 

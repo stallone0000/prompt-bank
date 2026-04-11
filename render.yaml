@@ -1,9 +1,12 @@
 services:
   - type: web
     name: trs-deepmath-demo
-    env: docker
+    runtime: docker
+    plan: free
+    branch: main
     dockerfilePath: ./Dockerfile
-    autoDeploy: false
+    autoDeployTrigger: off
+    healthCheckPath: /api/health
     envVars:
       - key: TRS_DEMO_API_KEY
         sync: false
