@@ -107,6 +107,8 @@ docker run -p 8080:8080 -e TRS_DEMO_API_KEY="your-360-api-key" trs-demo
 
 `Render` is the shortest path to a globally accessible URL.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/stallone0000/prompt-bank)
+
 1. Push this repo to GitHub.
 2. Make the repo public or grant Render access to it.
 3. In Render, choose `New +` -> `Blueprint`.
