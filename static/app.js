@@ -192,7 +192,6 @@ function renderLiveMetrics(container, result) {
   container.append(
     metricRow("Input tokens", formatMaybeNumber(result.prompt_tokens)),
     metricRow("Output tokens", formatMaybeNumber(result.completion_tokens), "accent"),
-    metricRow("Total tokens", formatMaybeNumber(result.total_tokens)),
     metricRow("Cost (input + output pricing)", formatMaybeYuan(result.cost_yuan)),
     metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
     metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status))
@@ -220,10 +219,6 @@ function renderLiveSummary(summary) {
     {
       label: "Output Reduction",
       value: formatMaybeReductionPercent(summary.completion_reduction_pct),
-    },
-    {
-      label: "Total Tokens Saved",
-      value: formatMaybeNumber(summary.total_tokens_saved),
     },
     {
       label: "Paper-Priced Cost Saved",
