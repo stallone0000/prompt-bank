@@ -8,6 +8,10 @@ Current preserved snapshot:
   - `index.html`
   - `app.js`
   - `styles.css`
+- `2026-04-12-exhibition-poster-snapshot/`
+  - `index.html`
+  - `app.js`
+  - `styles.css`
 
 Quick rollback:
 1. Copy the archived `index` file over `static/index.html`
@@ -16,3 +20,4 @@ Quick rollback:
 
 Named rollback target:
 - `2026-04-12-chatgpt-minimal-snapshot`
+- `2026-04-12-exhibition-poster-snapshot`
