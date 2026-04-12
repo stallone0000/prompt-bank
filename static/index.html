@@ -7,10 +7,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Serif+JP:wght@500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260412-jp-museum-white-1" />
+    <link rel="stylesheet" href="/styles.css" />
     <script>
       window.MathJax = {
         tex: {
@@ -29,39 +29,20 @@
   </head>
   <body>
     <div class="page-shell">
-      <header class="hero">
-        <div class="hero-grid">
-          <div class="hero-copy">
-            <p class="hero-kicker">DeepMath / Live Installation</p>
-            <h1 class="hero-title">
-              <span class="hero-line hero-line-strong">Thinking with Reasoning Skills:</span>
-              <span class="hero-line hero-line-soft">Fewer Tokens, More Accuracy</span>
-            </h1>
-            <div class="hero-meta">
-              <a
-                class="hero-link"
-                href="https://huggingface.co/datasets/zwhe99/DeepMath-103K"
-                target="_blank"
-                rel="noreferrer"
-              >
-                DeepMath-103K
-              </a>
-              <span class="hero-chip">Direct vs TRS</span>
-            </div>
-          </div>
-
-          <div class="hero-art" aria-hidden="true">
-            <div class="hero-axis hero-axis-a"></div>
-            <div class="hero-axis hero-axis-b"></div>
-            <div class="hero-orbit hero-orbit-a"></div>
-            <div class="hero-orbit hero-orbit-b"></div>
-            <div class="hero-seal">
-              <span>TRS</span>
-              <small>poster</small>
-            </div>
-            <div class="hero-note hero-note-a">retrieved skill</div>
-            <div class="hero-note hero-note-b">compact reasoning</div>
-          </div>
+      <header class="topbar">
+        <div class="topbar-copy">
+          <h1>Thinking with Reasoning Skills: Fewer Tokens, More Accuracy</h1>
+        </div>
+        <div class="topbar-meta">
+          <a
+            class="topbar-link"
+            href="https://huggingface.co/datasets/zwhe99/DeepMath-103K"
+            target="_blank"
+            rel="noreferrer"
+          >
+            DeepMath-103K
+          </a>
+          <span class="topbar-chip subtle">Direct vs TRS</span>
         </div>
       </header>
 
@@ -75,19 +56,13 @@
 
         <section class="stage">
           <div class="control-bar">
-            <div class="control-copy">
-              <span class="control-label">Live Studio</span>
-              <p>Choose a model, open a problem, and compare direct reasoning against TRS in real time.</p>
-            </div>
-            <div class="control-main">
-              <div class="model-toggle" id="modelToggle"></div>
-              <div class="control-actions">
-                <div class="verifier-card">
-                  <span>Verifier Model</span>
-                  <strong id="verifierModel">-</strong>
-                </div>
-                <button id="runButton" class="run-button">Run Live Comparison</button>
+            <div class="model-toggle" id="modelToggle"></div>
+            <div class="control-actions">
+              <div class="verifier-card">
+                <span>Verifier Model</span>
+                <strong id="verifierModel">-</strong>
               </div>
+              <button id="runButton" class="run-button">Run Live Comparison</button>
             </div>
           </div>
 
