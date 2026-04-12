@@ -221,29 +221,33 @@ a {
   gap: 12px;
 }
 
-.model-toggle {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.toggle-button,
 .run-button {
   border-radius: 999px;
   border: 1px solid var(--line-strong);
   cursor: pointer;
 }
 
-.toggle-button {
-  padding: 9px 13px;
-  background: var(--panel);
-  color: var(--ink);
+.model-picker {
+  min-width: min(440px, 100%);
 }
 
-.toggle-button.active {
-  background: var(--ink);
-  color: #ffffff;
-  border-color: var(--ink);
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.model-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  appearance: none;
 }
 
 .control-actions {
@@ -603,6 +607,7 @@ a {
   }
 
   .verifier-card,
+  .model-picker,
   .run-button {
     width: 100%;
   }

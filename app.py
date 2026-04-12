@@ -82,17 +82,20 @@ Candidate model answer:
 @dataclass(frozen=True)
 class ModelConfig:
     model_id: str
+    company: str
     label: str
     api_model: str
     prompt_template: str
-    input_price_yuan_per_million: float
-    output_price_yuan_per_million: float
+    input_price_yuan_per_million: float | None
+    output_price_yuan_per_million: float | None
     supports_reasoning_trace: bool
+    max_tokens: int = 32000
 
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "doubao": ModelConfig(
         model_id="doubao",
+        company="ByteDance / Doubao",
         label="Doubao Seed 1.8",
         api_model="volcengine/doubao-seed-1-8",
         prompt_template=PROMPT_SHORT,
@@ -102,6 +105,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "doubao2pro": ModelConfig(
         model_id="doubao2pro",
+        company="ByteDance / Doubao",
         label="Doubao Seed 2.0 Pro",
         api_model="volcengine/doubao-seed-2-0-pro",
         prompt_template=PROMPT_SHORT,
@@ -111,6 +115,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "oss": ModelConfig(
         model_id="oss",
+        company="Qiniu / GPT-OSS",
         label="GPT-OSS-120B",
         api_model="qiniu/gpt-oss-120b",
         prompt_template=PROMPT_COD,
@@ -120,21 +125,103 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "oss20": ModelConfig(
         model_id="oss20",
+        company="Qiniu / GPT-OSS",
         label="GPT-OSS-20B",
         api_model="qiniu/gpt-oss-20b",
         prompt_template=PROMPT_COD,
-        input_price_yuan_per_million=1.08,
-        output_price_yuan_per_million=5.4,
+        input_price_yuan_per_million=0.72,
+        output_price_yuan_per_million=3.6,
         supports_reasoning_trace=True,
     ),
     "gemini": ModelConfig(
         model_id="gemini",
+        company="Google / Gemini",
         label="Gemini 3 Flash",
         api_model="cloudsway/gemini-3-flash-preview",
         prompt_template=PROMPT_TRYTO,
         input_price_yuan_per_million=2.52,
         output_price_yuan_per_million=15.12,
         supports_reasoning_trace=False,
+    ),
+    "qwen35plus": ModelConfig(
+        model_id="qwen35plus",
+        company="Alibaba / Qwen",
+        label="Qwen 3.5 Plus",
+        api_model="alibaba/qwen3.5-plus",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=0.8,
+        output_price_yuan_per_million=4.8,
+        supports_reasoning_trace=True,
+    ),
+    "qwen35flash": ModelConfig(
+        model_id="qwen35flash",
+        company="Alibaba / Qwen",
+        label="Qwen 3.5 Flash",
+        api_model="alibaba/qwen3.5-flash",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=0.2,
+        output_price_yuan_per_million=2.0,
+        supports_reasoning_trace=True,
+    ),
+    "qwen36plus": ModelConfig(
+        model_id="qwen36plus",
+        company="Alibaba / Qwen",
+        label="Qwen 3.6 Plus",
+        api_model="qwen/qwen3.6-plus",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=2.0,
+        output_price_yuan_per_million=12.0,
+        supports_reasoning_trace=True,
+    ),
+    "glm5": ModelConfig(
+        model_id="glm5",
+        company="Z.AI / GLM",
+        label="GLM-5",
+        api_model="z-ai/glm-5",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=2.8,
+        output_price_yuan_per_million=12.6,
+        supports_reasoning_trace=True,
+    ),
+    "glm51": ModelConfig(
+        model_id="glm51",
+        company="Z.AI / GLM",
+        label="GLM-5.1",
+        api_model="z-ai/glm-5.1",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=6.0,
+        output_price_yuan_per_million=24.0,
+        supports_reasoning_trace=True,
+    ),
+    "minimax25hs": ModelConfig(
+        model_id="minimax25hs",
+        company="MiniMax",
+        label="MiniMax M2.5 Highspeed",
+        api_model="minimax/MiniMax-M2.5-highspeed",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=4.2,
+        output_price_yuan_per_million=16.8,
+        supports_reasoning_trace=True,
+    ),
+    "minimax27hs": ModelConfig(
+        model_id="minimax27hs",
+        company="MiniMax",
+        label="MiniMax M2.7 Highspeed",
+        api_model="minimax/MiniMax-M2.7-highspeed",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=4.2,
+        output_price_yuan_per_million=16.8,
+        supports_reasoning_trace=True,
+    ),
+    "kimi25": ModelConfig(
+        model_id="kimi25",
+        company="Moonshot / Kimi",
+        label="Kimi K2.5",
+        api_model="qiniu/kimi-k2.5",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=2.8,
+        output_price_yuan_per_million=14.7,
+        supports_reasoning_trace=True,
     ),
 }
 
@@ -150,10 +237,12 @@ def load_examples_payload() -> Dict[str, Any]:
     payload["models"] = {
         model_id: {
             **payload.get("models", {}).get(model_id, {}),
+            "company": config.company,
             "label": config.label,
             "apiModel": config.api_model,
             "supportsReasoningTrace": config.supports_reasoning_trace,
             "showsReasoningTrace": config.supports_reasoning_trace,
+            "maxTokens": config.max_tokens,
             "paperPricing": {
                 "inputYuanPerMillion": config.input_price_yuan_per_million,
                 "outputYuanPerMillion": config.output_price_yuan_per_million,
@@ -214,7 +303,7 @@ def build_api_payload(prompt_text: str, config: ModelConfig, stream: bool) -> Di
         "content_filter": False,
         "stream": stream,
         "temperature": float(os.environ.get("TRS_DEMO_TEMPERATURE", "0.7")),
-        "max_tokens": int(os.environ.get("TRS_DEMO_MAX_TOKENS", "32000")),
+        "max_tokens": config.max_tokens,
         "top_p": 0.9,
         "top_k": 0,
         "repetition_penalty": 1.05,
@@ -434,10 +523,12 @@ def compute_live_summary(direct: Dict[str, Any], trs: Dict[str, Any]) -> Dict[st
 def model_payload(config: ModelConfig) -> Dict[str, Any]:
     return {
         "id": config.model_id,
+        "company": config.company,
         "label": config.label,
         "apiModel": config.api_model,
         "supportsReasoningTrace": config.supports_reasoning_trace,
         "showsReasoningTrace": config.supports_reasoning_trace,
+        "maxTokens": config.max_tokens,
         "paperPricing": {
             "inputYuanPerMillion": config.input_price_yuan_per_million,
             "outputYuanPerMillion": config.output_price_yuan_per_million,

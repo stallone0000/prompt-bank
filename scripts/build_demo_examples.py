@@ -68,53 +68,159 @@ SELECTED = [
 
 MODEL_META = {
     "doubao": {
+        "company": "ByteDance / Doubao",
         "label": "Doubao Seed 1.8",
         "apiModel": "volcengine/doubao-seed-1-8",
         "promptStyle": "short",
         "supportsReasoningTrace": True,
+        "maxTokens": 32000,
         "paperPricing": {
             "inputYuanPerMillion": 0.8,
             "outputYuanPerMillion": 2.0,
         },
     },
     "doubao2pro": {
+        "company": "ByteDance / Doubao",
         "label": "Doubao Seed 2.0 Pro",
         "apiModel": "volcengine/doubao-seed-2-0-pro",
         "promptStyle": "short",
         "supportsReasoningTrace": True,
+        "maxTokens": 32000,
         "paperPricing": {
             "inputYuanPerMillion": 3.2,
             "outputYuanPerMillion": 16.0,
         },
     },
     "oss": {
+        "company": "Qiniu / GPT-OSS",
         "label": "GPT-OSS-120B",
         "apiModel": "qiniu/gpt-oss-120b",
         "promptStyle": "cod",
         "supportsReasoningTrace": False,
+        "maxTokens": 32000,
         "paperPricing": {
             "inputYuanPerMillion": 1.08,
             "outputYuanPerMillion": 5.4,
         },
     },
     "oss20": {
+        "company": "Qiniu / GPT-OSS",
         "label": "GPT-OSS-20B",
         "apiModel": "qiniu/gpt-oss-20b",
         "promptStyle": "cod",
         "supportsReasoningTrace": True,
+        "maxTokens": 32000,
         "paperPricing": {
-            "inputYuanPerMillion": 1.08,
-            "outputYuanPerMillion": 5.4,
+            "inputYuanPerMillion": 0.72,
+            "outputYuanPerMillion": 3.6,
         },
     },
     "gemini": {
+        "company": "Google / Gemini",
         "label": "Gemini 3 Flash",
         "apiModel": "cloudsway/gemini-3-flash-preview",
         "promptStyle": "tryto",
         "supportsReasoningTrace": False,
+        "maxTokens": 32000,
         "paperPricing": {
             "inputYuanPerMillion": 2.52,
             "outputYuanPerMillion": 15.12,
+        },
+    },
+    "qwen35plus": {
+        "company": "Alibaba / Qwen",
+        "label": "Qwen 3.5 Plus",
+        "apiModel": "alibaba/qwen3.5-plus",
+        "promptStyle": "short",
+        "supportsReasoningTrace": True,
+        "maxTokens": 32000,
+        "paperPricing": {
+            "inputYuanPerMillion": 0.8,
+            "outputYuanPerMillion": 4.8,
+        },
+    },
+    "qwen35flash": {
+        "company": "Alibaba / Qwen",
+        "label": "Qwen 3.5 Flash",
+        "apiModel": "alibaba/qwen3.5-flash",
+        "promptStyle": "short",
+        "supportsReasoningTrace": True,
+        "maxTokens": 32000,
+        "paperPricing": {
+            "inputYuanPerMillion": 0.2,
+            "outputYuanPerMillion": 2.0,
+        },
+    },
+    "qwen36plus": {
+        "company": "Alibaba / Qwen",
+        "label": "Qwen 3.6 Plus",
+        "apiModel": "qwen/qwen3.6-plus",
+        "promptStyle": "short",
+        "supportsReasoningTrace": True,
+        "maxTokens": 32000,
+        "paperPricing": {
+            "inputYuanPerMillion": 2.0,
+            "outputYuanPerMillion": 12.0,
+        },
+    },
+    "glm5": {
+        "company": "Z.AI / GLM",
+        "label": "GLM-5",
+        "apiModel": "z-ai/glm-5",
+        "promptStyle": "short",
+        "supportsReasoningTrace": True,
+        "maxTokens": 32000,
+        "paperPricing": {
+            "inputYuanPerMillion": 2.8,
+            "outputYuanPerMillion": 12.6,
+        },
+    },
+    "glm51": {
+        "company": "Z.AI / GLM",
+        "label": "GLM-5.1",
+        "apiModel": "z-ai/glm-5.1",
+        "promptStyle": "short",
+        "supportsReasoningTrace": True,
+        "maxTokens": 32000,
+        "paperPricing": {
+            "inputYuanPerMillion": 6.0,
+            "outputYuanPerMillion": 24.0,
+        },
+    },
+    "minimax25hs": {
+        "company": "MiniMax",
+        "label": "MiniMax M2.5 Highspeed",
+        "apiModel": "minimax/MiniMax-M2.5-highspeed",
+        "promptStyle": "short",
+        "supportsReasoningTrace": True,
+        "maxTokens": 32000,
+        "paperPricing": {
+            "inputYuanPerMillion": 4.2,
+            "outputYuanPerMillion": 16.8,
+        },
+    },
+    "minimax27hs": {
+        "company": "MiniMax",
+        "label": "MiniMax M2.7 Highspeed",
+        "apiModel": "minimax/MiniMax-M2.7-highspeed",
+        "promptStyle": "short",
+        "supportsReasoningTrace": True,
+        "maxTokens": 32000,
+        "paperPricing": {
+            "inputYuanPerMillion": 4.2,
+            "outputYuanPerMillion": 16.8,
+        },
+    },
+    "kimi25": {
+        "company": "Moonshot / Kimi",
+        "label": "Kimi K2.5",
+        "apiModel": "qiniu/kimi-k2.5",
+        "promptStyle": "short",
+        "supportsReasoningTrace": True,
+        "maxTokens": 32000,
+        "paperPricing": {
+            "inputYuanPerMillion": 2.8,
+            "outputYuanPerMillion": 14.7,
         },
     },
 }
@@ -144,6 +250,19 @@ def build_model_archive(direct_item: Dict, trs_item: Dict) -> Dict:
     }
 
 
+DOUBAO_ARCHIVE_MODEL_IDS = [
+    "doubao2pro",
+    "qwen35plus",
+    "qwen35flash",
+    "qwen36plus",
+    "glm5",
+    "glm51",
+    "minimax25hs",
+    "minimax27hs",
+    "kimi25",
+]
+
+
 def main() -> None:
     loaded = {name: load_jsonl(path) for name, path in FILES.items()}
     examples = []
@@ -157,6 +276,15 @@ def main() -> None:
         direct_gemini = loaded["gemini_direct"][qid]
         trs_gemini = loaded["gemini_trs"][qid]
 
+        archived = {
+            "doubao": build_model_archive(direct_doubao, trs_doubao),
+            "oss": build_model_archive(direct_oss, trs_oss),
+            "oss20": build_model_archive(direct_oss, trs_oss),
+            "gemini": build_model_archive(direct_gemini, trs_gemini),
+        }
+        for model_id in DOUBAO_ARCHIVE_MODEL_IDS:
+            archived[model_id] = build_model_archive(direct_doubao, trs_doubao)
+
         examples.append(
             {
                 "id": selected["id"],
@@ -168,13 +296,7 @@ def main() -> None:
                 "answer": direct_doubao["answer"],
                 "topic": direct_doubao.get("topic", ""),
                 "difficulty": direct_doubao.get("difficulty"),
-                "archived": {
-                    "doubao": build_model_archive(direct_doubao, trs_doubao),
-                    "doubao2pro": build_model_archive(direct_doubao, trs_doubao),
-                    "oss": build_model_archive(direct_oss, trs_oss),
-                    "oss20": build_model_archive(direct_oss, trs_oss),
-                    "gemini": build_model_archive(direct_gemini, trs_gemini),
-                },
+                "archived": archived,
             }
         )
 

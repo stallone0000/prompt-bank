@@ -21,7 +21,7 @@ const RUN_RESTART_MAX_RETRIES = 2;
 
 const nodes = {
   exampleList: document.getElementById("exampleList"),
-  modelToggle: document.getElementById("modelToggle"),
+  modelSelect: document.getElementById("modelSelect"),
   runButton: document.getElementById("runButton"),
   topicBadge: document.getElementById("topicBadge"),
   difficultyBadge: document.getElementById("difficultyBadge"),
@@ -78,20 +78,37 @@ function typesetMath(targets = []) {
   window.MathJax.typesetPromise(targets).catch(() => {});
 }
 
-function renderModels() {
-  nodes.modelToggle.innerHTML = "";
+function groupedModels() {
+  const groups = new Map();
   Object.entries(state.payload.models).forEach(([modelId, model]) => {
-    const button = document.createElement("button");
-    button.className = modelId === state.modelId ? "toggle-button active" : "toggle-button";
-    button.textContent = model.label;
-    button.addEventListener("click", () => {
-      state.modelId = modelId;
-      renderModels();
-      renderSelection();
-      clearLiveResults();
-    });
-    nodes.modelToggle.appendChild(button);
+    const company = model.company || "Other";
+    if (!groups.has(company)) {
+      groups.set(company, []);
+    }
+    groups.get(company).push([modelId, model]);
   });
+  return groups;
+}
+
+function renderModels() {
+  const previousValue = nodes.modelSelect.value;
+  nodes.modelSelect.innerHTML = "";
+
+  groupedModels().forEach((entries, company) => {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = company;
+    entries.forEach(([modelId, model]) => {
+      const option = document.createElement("option");
+      option.value = modelId;
+      option.textContent = model.label;
+      optgroup.appendChild(option);
+    });
+    nodes.modelSelect.appendChild(optgroup);
+  });
+
+  const selectedValue = state.payload.models[state.modelId] ? state.modelId : previousValue;
+  nodes.modelSelect.value = state.payload.models[selectedValue] ? selectedValue : Object.keys(state.payload.models)[0];
+  state.modelId = nodes.modelSelect.value;
 }
 
 function renderExamples() {
@@ -537,6 +554,11 @@ async function boot() {
   renderExamples();
   renderSelection();
   clearLiveResults();
+  nodes.modelSelect.addEventListener("change", (event) => {
+    state.modelId = event.target.value;
+    renderSelection();
+    clearLiveResults();
+  });
   nodes.runButton.addEventListener("click", runComparison);
 }
 
