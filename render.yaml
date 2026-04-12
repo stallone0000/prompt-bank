@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: trs-deepmath-demo
+    name: reasoning-skill
     runtime: docker
     plan: free
     branch: main
