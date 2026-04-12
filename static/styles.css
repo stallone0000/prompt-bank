@@ -216,7 +216,7 @@ a {
 
 .control-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
@@ -227,8 +227,9 @@ a {
   cursor: pointer;
 }
 
-.model-picker {
-  min-width: min(440px, 100%);
+.company-picker-shell {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .field-label {
@@ -238,9 +239,64 @@ a {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+.company-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
 }
 
-.model-select {
+.company-card {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-soft);
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.company-card.active {
+  border-color: rgba(16, 163, 127, 0.28);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.company-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  min-height: 34px;
+}
+
+.company-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(31, 31, 31, 0.06);
+  padding: 4px;
+}
+
+.company-copy {
+  min-width: 0;
+}
+
+.company-name {
+  display: block;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+.company-count {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
+.company-select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--line-strong);
@@ -607,7 +663,7 @@ a {
   }
 
   .verifier-card,
-  .model-picker,
+  .company-picker-shell,
   .run-button {
     width: 100%;
   }

@@ -1,6 +1,7 @@
 const state = {
   payload: null,
   modelId: "doubao",
+  companySelections: {},
   exampleId: null,
   running: false,
   activeModel: null,
@@ -21,7 +22,7 @@ const RUN_RESTART_MAX_RETRIES = 2;
 
 const nodes = {
   exampleList: document.getElementById("exampleList"),
-  modelSelect: document.getElementById("modelSelect"),
+  companyPickerGrid: document.getElementById("companyPickerGrid"),
   runButton: document.getElementById("runButton"),
   topicBadge: document.getElementById("topicBadge"),
   difficultyBadge: document.getElementById("difficultyBadge"),
@@ -40,6 +41,37 @@ const nodes = {
   directAnswer: document.getElementById("directAnswer"),
   trsAnswer: document.getElementById("trsAnswer"),
   template: document.getElementById("exampleCardTemplate"),
+};
+
+const COMPANY_META = {
+  "ByteDance / Doubao": {
+    logoPath: "/assets/company-logos/doubao.png",
+    logoAlt: "Doubao model logo",
+  },
+  "Alibaba / Qwen": {
+    logoPath: "/assets/company-logos/qwen.png",
+    logoAlt: "Qwen model logo",
+  },
+  "Z.AI / GLM": {
+    logoPath: "/assets/company-logos/glm-zhipu.png",
+    logoAlt: "GLM model logo",
+  },
+  MiniMax: {
+    logoPath: "/assets/company-logos/minimax.png",
+    logoAlt: "MiniMax model logo",
+  },
+  "Moonshot / Kimi": {
+    logoPath: "/assets/company-logos/kimi.png",
+    logoAlt: "Kimi model logo",
+  },
+  "Qiniu / GPT-OSS": {
+    logoPath: "/assets/company-logos/qiniu.jpg",
+    logoAlt: "Qiniu logo",
+  },
+  "Google / Gemini": {
+    logoPath: "/assets/company-logos/google-ai.svg",
+    logoAlt: "Google AI logo",
+  },
 };
 
 function formatNumber(value) {
@@ -90,25 +122,84 @@ function groupedModels() {
   return groups;
 }
 
+function initializeCompanySelections() {
+  const activeModel = state.payload.models[state.modelId] ? state.modelId : Object.keys(state.payload.models)[0];
+  const activeCompany = state.payload.models[activeModel]?.company;
+  state.companySelections = {};
+  groupedModels().forEach((entries, company) => {
+    const defaultModel = entries.some(([modelId]) => modelId === activeModel) && company === activeCompany
+      ? activeModel
+      : entries[0][0];
+    state.companySelections[company] = defaultModel;
+  });
+  state.modelId = activeModel;
+}
+
+function ensureCompanySelections() {
+  if (!Object.keys(state.companySelections).length) {
+    initializeCompanySelections();
+  }
+  groupedModels().forEach((entries, company) => {
+    const current = state.companySelections[company];
+    if (!entries.some(([modelId]) => modelId === current)) {
+      state.companySelections[company] = entries[0][0];
+    }
+  });
+}
+
 function renderModels() {
-  const previousValue = nodes.modelSelect.value;
-  nodes.modelSelect.innerHTML = "";
+  ensureCompanySelections();
+  const activeCompany = state.payload.models[state.modelId]?.company;
+  nodes.companyPickerGrid.innerHTML = "";
 
   groupedModels().forEach((entries, company) => {
-    const optgroup = document.createElement("optgroup");
-    optgroup.label = company;
+    const meta = COMPANY_META[company] || {};
+    const card = document.createElement("article");
+    card.className = company === activeCompany ? "company-card active" : "company-card";
+
+    const brand = document.createElement("div");
+    brand.className = "company-brand";
+
+    if (meta.logoPath) {
+      const logo = document.createElement("img");
+      logo.className = "company-logo";
+      logo.src = meta.logoPath;
+      logo.alt = meta.logoAlt || `${company} logo`;
+      brand.appendChild(logo);
+    }
+
+    const copy = document.createElement("div");
+    copy.className = "company-copy";
+    const label = document.createElement("span");
+    label.className = "company-name";
+    label.textContent = company;
+    const metaLine = document.createElement("strong");
+    metaLine.className = "company-count";
+    metaLine.textContent = `${entries.length} model${entries.length > 1 ? "s" : ""}`;
+    copy.append(label, metaLine);
+    brand.appendChild(copy);
+
+    const select = document.createElement("select");
+    select.className = "company-select";
+    select.dataset.company = company;
     entries.forEach(([modelId, model]) => {
       const option = document.createElement("option");
       option.value = modelId;
       option.textContent = model.label;
-      optgroup.appendChild(option);
+      select.appendChild(option);
     });
-    nodes.modelSelect.appendChild(optgroup);
-  });
+    select.value = state.companySelections[company];
+    select.addEventListener("change", (event) => {
+      state.companySelections[company] = event.target.value;
+      state.modelId = event.target.value;
+      renderModels();
+      renderSelection();
+      clearLiveResults();
+    });
 
-  const selectedValue = state.payload.models[state.modelId] ? state.modelId : previousValue;
-  nodes.modelSelect.value = state.payload.models[selectedValue] ? selectedValue : Object.keys(state.payload.models)[0];
-  state.modelId = nodes.modelSelect.value;
+    card.append(brand, select);
+    nodes.companyPickerGrid.appendChild(card);
+  });
 }
 
 function renderExamples() {
@@ -550,15 +641,11 @@ async function boot() {
   const response = await fetch("/api/examples");
   state.payload = await response.json();
   state.exampleId = state.payload.examples[0].id;
+  initializeCompanySelections();
   renderModels();
   renderExamples();
   renderSelection();
   clearLiveResults();
-  nodes.modelSelect.addEventListener("change", (event) => {
-    state.modelId = event.target.value;
-    renderSelection();
-    clearLiveResults();
-  });
   nodes.runButton.addEventListener("click", runComparison);
 }
 
