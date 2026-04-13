@@ -407,7 +407,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         prompt_template=PROMPT_TRYTO,
         input_price_yuan_per_million=7.2,
         output_price_yuan_per_million=36.0,
-        supports_reasoning_trace=False,
+        supports_reasoning_trace=True,
         extra_body=CLAUDE_THINKING_EXTRA_BODY,
         temperature_override=1.0,
     ),
