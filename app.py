@@ -1047,6 +1047,15 @@ def verifier_max_tokens_param(model_name: str) -> str:
     return "max_tokens"
 
 
+def verifier_max_tokens_limit(model_name: str) -> int:
+    lowered = model_name.lower()
+    if "gpt-5" in lowered or "openai/" in lowered:
+        return 32
+    if "gpt-oss" in lowered or "grok" in lowered or "qiniu/" in lowered:
+        return 96
+    return 64
+
+
 def verify_answer(
     question_text: str,
     reference_answer: str,
@@ -1077,17 +1086,36 @@ def verify_answer(
         "stream": False,
         "temperature": 0,
     }
-    payload[verifier_max_tokens_param(verifier_model)] = 32
+    payload[verifier_max_tokens_param(verifier_model)] = verifier_max_tokens_limit(verifier_model)
 
     opener = build_opener()
     timeout_seconds = get_verify_timeout_seconds()
     parsed = None
     last_error = ""
+    content = ""
     for attempt in range(1, max_retries + 1):
         try:
             with opener.open(build_json_api_request(payload), timeout=timeout_seconds) as response:
                 parsed = json.loads(response.read().decode("utf-8"))
-            break
+            choices = parsed.get("choices", [])
+            message = choices[0].get("message", {}) if choices else {}
+            content = extract_content_text(message.get("content", "")).strip()
+            if not content:
+                content = extract_reasoning_text(message).strip()
+            if content:
+                break
+            last_error = "Verifier returned an empty response."
+            if attempt >= max_retries:
+                return {
+                    "status": "unknown",
+                    "label": "Verifier Empty",
+                    "reference_answer": reference_answer,
+                    "verifier_model": verifier_model,
+                    "verdict": "UNKNOWN",
+                    "verifier_response": "",
+                }
+            time.sleep(retry_sleep_seconds(attempt, base=0.4, cap=3.0))
+            continue
         except Exception as exc:
             last_error = format_upstream_error(exc)
             if attempt >= max_retries or not is_retryable_upstream_error(exc, last_error):
@@ -1111,9 +1139,6 @@ def verify_answer(
             "verifier_response": last_error,
         }
 
-    choices = parsed.get("choices", [])
-    message = choices[0].get("message", {}) if choices else {}
-    content = message.get("content", "").strip()
     verdict = parse_verifier_verdict(content)
     if verdict == "CORRECT":
         status = "correct"
