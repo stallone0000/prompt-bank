@@ -1004,11 +1004,25 @@ a {
     align-items: stretch;
   }
 
+  .picker-head {
+    gap: 4px;
+  }
+
+  .picker-tools {
+    flex: none;
+    gap: 6px;
+  }
+
+  .picker-note {
+    width: auto;
+    align-self: flex-start;
+  }
+
   .verifier-card,
   .model-picker-shell,
   .run-button,
   .stop-button,
-  .picker-note {
+  .verifier-select {
     width: 100%;
   }
 
