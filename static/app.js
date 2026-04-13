@@ -10,22 +10,30 @@ const state = {
     direct: false,
     trs: false,
   },
+  laneRecovering: {
+    direct: false,
+    trs: false,
+  },
   laneAttempts: {
     direct: 1,
     trs: 1,
   },
+  activeRunId: 0,
   streamError: null,
   streamSawLaneOutput: false,
+  streamAbortController: null,
+  userStopped: false,
 };
 
-const STREAM_CONNECT_MAX_RETRIES = 3;
-const RUN_RESTART_MAX_RETRIES = 2;
+const STREAM_CONNECT_MAX_RETRIES = 4;
+const RUN_RESTART_MAX_RETRIES = 3;
 
 const nodes = {
   exampleList: document.getElementById("exampleList"),
   modelCount: document.getElementById("modelCount"),
   modelGroupGrid: document.getElementById("modelGroupGrid"),
   runButton: document.getElementById("runButton"),
+  stopButton: document.getElementById("stopButton"),
   topicBadge: document.getElementById("topicBadge"),
   difficultyBadge: document.getElementById("difficultyBadge"),
   questionTitle: document.getElementById("questionTitle"),
@@ -563,11 +571,18 @@ function updateRunStatus() {
   if (!state.running) {
     return;
   }
+  const recovering = Object.entries(state.laneRecovering)
+    .filter(([, active]) => active)
+    .map(([lane]) => (lane === "direct" ? "Direct" : "TRS"));
+  if (recovering.length) {
+    nodes.runStatus.textContent = `${recovering.join(" and ")} stream unstable. Recovering with a standard request.`;
+    return;
+  }
   const retrying = Object.entries(state.laneAttempts)
     .filter(([lane, attempt]) => attempt > 1 && !state.streamProgress[lane])
     .map(([lane, attempt]) => `${lane === "direct" ? "Direct" : "TRS"} attempt ${attempt}`);
   if (retrying.length) {
-    nodes.runStatus.textContent = `Retrying ${retrying.join(" and ")} after a transient upstream error.`;
+    nodes.runStatus.textContent = `${retrying.join(" and ")} retrying automatically after an upstream drop.`;
     return;
   }
   if (doneCount === 0) {
@@ -611,7 +626,41 @@ function appendLaneDelta(lane, kind, text) {
   laneNode.answer.textContent += text;
 }
 
+function seedLaneFallback(lane) {
+  const laneNode = laneNodes(lane);
+  laneNode.metrics.innerHTML = "";
+  laneNode.reasoning.textContent = "(Stream interrupted. Recovering the full result...)";
+  laneNode.answer.textContent = "(Recovering with a standard request...)";
+  setLaneStreaming(lane, false);
+}
+
+function stopAndClearRun() {
+  state.activeRunId += 1;
+  state.userStopped = true;
+  state.streamError = null;
+  state.streamSawLaneOutput = false;
+  state.streamProgress = { direct: false, trs: false };
+  state.laneRecovering = { direct: false, trs: false };
+  state.laneAttempts = { direct: 1, trs: 1 };
+  if (state.streamAbortController) {
+    state.streamAbortController.abort();
+  }
+  state.streamAbortController = null;
+  state.running = false;
+  clearLiveResults();
+  nodes.runStatus.textContent = "Run stopped and cleared. You can switch models or start a new run.";
+  nodes.runButton.disabled = false;
+  nodes.runButton.textContent = "Run Live Comparison";
+  nodes.stopButton.disabled = true;
+}
+
 function handleStreamEvent(eventName, payload) {
+  if (payload?.runId != null && payload.runId !== state.activeRunId) {
+    return false;
+  }
+  if ((!state.running || state.userStopped) && eventName !== "done") {
+    return false;
+  }
   switch (eventName) {
     case "meta":
       state.activeModel = payload.model;
@@ -621,11 +670,17 @@ function handleStreamEvent(eventName, payload) {
     case "lane_status":
       return false;
     case "lane_retry":
+      state.laneRecovering[payload.lane] = false;
       state.laneAttempts[payload.lane] = payload.attempt;
       const retryLaneNode = laneNodes(payload.lane);
       retryLaneNode.metrics.innerHTML = "";
       seedLanePlaceholders(payload.lane, true);
       setLaneStreaming(payload.lane, true);
+      updateRunStatus();
+      return false;
+    case "lane_fallback":
+      state.laneRecovering[payload.lane] = true;
+      seedLaneFallback(payload.lane);
       updateRunStatus();
       return false;
     case "lane_delta":
@@ -634,10 +689,15 @@ function handleStreamEvent(eventName, payload) {
       return false;
     case "lane_result":
       state.streamSawLaneOutput = true;
+      state.laneRecovering[payload.lane] = false;
       state.streamProgress[payload.lane] = true;
       state.laneAttempts[payload.lane] = Math.max(state.laneAttempts[payload.lane], 1);
       finalizeLaneResult(payload.lane, payload.result);
       updateRunStatus();
+      return false;
+    case "lane_error":
+      state.laneRecovering[payload.lane] = false;
+      setLaneStreaming(payload.lane, false);
       return false;
     case "summary":
       renderLiveSummary(payload.summary);
@@ -719,7 +779,7 @@ function isRetryableStreamError(error) {
   );
 }
 
-async function openRunStreamResponse() {
+async function openRunStreamResponse(signal, runId) {
   let lastError = new Error("Live stream connection failed.");
 
   for (let attempt = 1; attempt <= STREAM_CONNECT_MAX_RETRIES; attempt += 1) {
@@ -735,9 +795,11 @@ async function openRunStreamResponse() {
           Accept: "text/event-stream",
         },
         cache: "no-store",
+        signal,
         body: JSON.stringify({
           exampleId: state.exampleId,
           modelId: state.modelId,
+          runId,
         }),
       });
 
@@ -780,14 +842,20 @@ async function runComparison() {
 
   clearLiveResults();
   openTracePanels();
+  const runId = state.activeRunId + 1;
+  state.activeRunId = runId;
   state.running = true;
+  state.userStopped = false;
   state.streamError = null;
   state.streamSawLaneOutput = false;
   state.streamProgress = { direct: false, trs: false };
+  state.laneRecovering = { direct: false, trs: false };
   state.laneAttempts = { direct: 1, trs: 1 };
   state.activeModel = state.payload.models[state.modelId];
+  state.streamAbortController = new AbortController();
   nodes.runButton.disabled = true;
   nodes.runButton.textContent = "Streaming...";
+  nodes.stopButton.disabled = false;
   setLaneStreaming("direct", true);
   setLaneStreaming("trs", true);
   seedReasoningPlaceholders();
@@ -796,13 +864,19 @@ async function runComparison() {
   try {
     for (let attempt = 1; attempt <= RUN_RESTART_MAX_RETRIES; attempt += 1) {
       try {
-        const response = await openRunStreamResponse();
+        const response = await openRunStreamResponse(state.streamAbortController.signal, runId);
         await consumeEventStream(response);
         if (state.streamError) {
           throw new Error(state.streamError);
         }
         return;
       } catch (error) {
+        if (state.activeRunId !== runId) {
+          return;
+        }
+        if (state.userStopped || error?.name === "AbortError") {
+          return;
+        }
         const retryable = isRetryableStreamError(error);
         const noFinishedLane = !state.streamProgress.direct && !state.streamProgress.trs;
         const noLaneOutput = !state.streamSawLaneOutput;
@@ -821,13 +895,25 @@ async function runComparison() {
       }
     }
   } catch (error) {
+    if (state.activeRunId !== runId) {
+      return;
+    }
+    if (state.userStopped || error?.name === "AbortError") {
+      return;
+    }
     nodes.runStatus.textContent = `Live run failed: ${error.message}`;
     setLaneStreaming("direct", false);
     setLaneStreaming("trs", false);
   } finally {
+    if (state.activeRunId !== runId) {
+      return;
+    }
     state.running = false;
+    state.streamAbortController = null;
+    state.userStopped = false;
     nodes.runButton.disabled = false;
     nodes.runButton.textContent = "Run Live Comparison";
+    nodes.stopButton.disabled = true;
   }
 }
 
@@ -841,6 +927,8 @@ async function boot() {
   renderSelection();
   clearLiveResults();
   nodes.runButton.addEventListener("click", runComparison);
+  nodes.stopButton.addEventListener("click", stopAndClearRun);
+  nodes.stopButton.disabled = true;
 }
 
 boot().catch((error) => {

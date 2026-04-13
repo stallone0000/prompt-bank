@@ -271,7 +271,7 @@ a {
 
 .model-group-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
   gap: 6px;
 }
 
@@ -412,20 +412,37 @@ a {
   color: #b83f2f;
 }
 
-.run-button {
+.run-button,
+.stop-button {
   border-radius: 999px;
   border: 1px solid var(--line-strong);
   cursor: pointer;
   padding: 10px 15px;
+  font-weight: 600;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+
+.run-button {
   background: var(--accent);
   color: #ffffff;
   border-color: var(--accent);
-  font-weight: 600;
 }
 
-.run-button:disabled {
+.stop-button {
+  background: #ffffff;
+  color: #b04839;
+  border-color: rgba(176, 72, 57, 0.28);
+}
+
+.stop-button:hover:not(:disabled) {
+  background: #fff2ef;
+  border-color: rgba(176, 72, 57, 0.45);
+}
+
+.run-button:disabled,
+.stop-button:disabled {
   opacity: 0.65;
-  cursor: wait;
+  cursor: not-allowed;
 }
 
 .context-grid {
@@ -755,6 +772,7 @@ a {
   .verifier-card,
   .model-picker-shell,
   .run-button,
+  .stop-button,
   .picker-note {
     width: 100%;
   }

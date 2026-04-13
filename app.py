@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import socket
 import sys
 import threading
 import time
@@ -55,6 +56,31 @@ TOKEN_USAGE_FIELDS = [
     "usage.completion_tokens",
     "usage.total_tokens",
 ]
+RETRYABLE_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
+RETRYABLE_ERROR_SNIPPETS = (
+    "timed out",
+    "timeout",
+    "temporarily unavailable",
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "remote end closed",
+    "incomplete read",
+    "broken pipe",
+    "eof occurred",
+)
+RETRYABLE_HTTP_DETAIL_SNIPPETS = (
+    "third_request_id",
+    "original_error",
+    "temporarily unavailable",
+    "upstream",
+    "timeout",
+    "too many requests",
+    "rate limit",
+    "bad gateway",
+    "gateway",
+    "forbidden",
+)
 VERIFY_PROMPT_TEMPLATE = """
 You are a answer checker.
 
@@ -540,22 +566,50 @@ def parse_verifier_verdict(content: str) -> str:
     return first_line or "UNKNOWN"
 
 
-def get_max_retries() -> int:
+def env_int(name: str, default: int, minimum: int = 1) -> int:
     try:
-        return max(1, int(os.environ.get("TRS_DEMO_MAX_RETRIES", "5")))
+        return max(minimum, int(os.environ.get(name, str(default))))
     except ValueError:
-        return 5
+        return default
+
+
+def get_live_max_retries() -> int:
+    return env_int("TRS_DEMO_MAX_RETRIES", 6)
+
+
+def get_stream_max_retries() -> int:
+    return env_int("TRS_DEMO_STREAM_MAX_RETRIES", max(7, get_live_max_retries()))
+
+
+def get_verify_max_retries() -> int:
+    return env_int("TRS_DEMO_VERIFY_MAX_RETRIES", max(7, get_live_max_retries()))
 
 
 def get_timeout_seconds() -> int:
-    try:
-        return max(1, int(os.environ.get("TRS_DEMO_TIMEOUT_SECONDS", "300")))
-    except ValueError:
-        return 300
+    return env_int("TRS_DEMO_TIMEOUT_SECONDS", 300)
 
 
-def retry_sleep_seconds(attempt_number: int) -> float:
-    return min(2.0, 0.35 * attempt_number)
+def get_verify_timeout_seconds() -> int:
+    return env_int("TRS_DEMO_VERIFY_TIMEOUT_SECONDS", 120)
+
+
+def retry_sleep_seconds(attempt_number: int, *, base: float = 0.6, cap: float = 6.0) -> float:
+    exponent = max(0, attempt_number - 1)
+    return round(min(cap, base * (1.8**exponent)), 2)
+
+
+def is_retryable_upstream_error(exc: Exception, formatted_error: str = "") -> bool:
+    if isinstance(exc, error.HTTPError):
+        if exc.code in RETRYABLE_HTTP_STATUS_CODES:
+            return True
+        if exc.code in {400, 403}:
+            detail = (formatted_error or str(exc)).lower()
+            return any(snippet in detail for snippet in RETRYABLE_HTTP_DETAIL_SNIPPETS)
+        return False
+    if isinstance(exc, (error.URLError, TimeoutError, socket.timeout)):
+        return True
+    message = str(exc).lower()
+    return any(snippet in message for snippet in RETRYABLE_ERROR_SNIPPETS)
 
 
 def format_upstream_error(exc: Exception) -> str:
@@ -565,10 +619,17 @@ def format_upstream_error(exc: Exception) -> str:
     return str(exc)
 
 
+def verifier_max_tokens_param(model_name: str) -> str:
+    lowered = model_name.lower()
+    if "gpt-5" in lowered or "openai/" in lowered:
+        return "max_completion_tokens"
+    return "max_tokens"
+
+
 def verify_answer(question_text: str, reference_answer: str, candidate_answer: str) -> Dict[str, Any]:
     verifier_model = get_verify_model()
     cleaned_candidate = (candidate_answer or "").strip()
-    max_retries = get_max_retries()
+    max_retries = get_verify_max_retries()
     if not cleaned_candidate:
         return {
             "status": "missing",
@@ -587,12 +648,13 @@ def verify_answer(question_text: str, reference_answer: str, candidate_answer: s
     payload = {
         "model": verifier_model,
         "messages": [{"role": "user", "content": verify_prompt}],
-        "content_filter": False,
         "stream": False,
+        "temperature": 0,
     }
+    payload[verifier_max_tokens_param(verifier_model)] = 32
 
     opener = build_opener()
-    timeout_seconds = get_timeout_seconds()
+    timeout_seconds = get_verify_timeout_seconds()
     parsed = None
     last_error = ""
     for attempt in range(1, max_retries + 1):
@@ -602,21 +664,21 @@ def verify_answer(question_text: str, reference_answer: str, candidate_answer: s
             break
         except Exception as exc:
             last_error = format_upstream_error(exc)
-            if attempt >= max_retries:
+            if attempt >= max_retries or not is_retryable_upstream_error(exc, last_error):
                 return {
                     "status": "unknown",
-                    "label": "Verifier Error",
+                    "label": "Verifier Retry Failed",
                     "reference_answer": reference_answer,
                     "verifier_model": verifier_model,
                     "verdict": "UNKNOWN",
                     "verifier_response": last_error,
                 }
-            time.sleep(retry_sleep_seconds(attempt))
+            time.sleep(retry_sleep_seconds(attempt, base=0.8, cap=8.0))
 
     if parsed is None:
         return {
             "status": "unknown",
-            "label": "Verifier Error",
+            "label": "Verifier Retry Failed",
             "reference_answer": reference_answer,
             "verifier_model": verifier_model,
             "verdict": "UNKNOWN",
@@ -728,7 +790,7 @@ def model_payload(config: ModelConfig) -> Dict[str, Any]:
 def call_model(question_text: str, prompt_text: str, config: ModelConfig, reference_answer: str) -> Dict[str, Any]:
     opener = build_opener()
     timeout_seconds = get_timeout_seconds()
-    max_retries = get_max_retries()
+    max_retries = get_live_max_retries()
     parsed = None
     last_error = ""
     for attempt in range(1, max_retries + 1):
@@ -738,7 +800,7 @@ def call_model(question_text: str, prompt_text: str, config: ModelConfig, refere
             break
         except Exception as exc:
             last_error = format_upstream_error(exc)
-            if attempt >= max_retries:
+            if attempt >= max_retries or not is_retryable_upstream_error(exc, last_error):
                 raise RuntimeError(f"Upstream API request failed after {max_retries} attempts: {last_error}") from exc
             time.sleep(retry_sleep_seconds(attempt))
 
@@ -765,10 +827,11 @@ def stream_model(
     reference_answer: str,
     on_delta: Callable[[str, str], None],
     on_retry: Callable[[int, int, str], None],
+    on_fallback: Callable[[str], None],
 ) -> Dict[str, Any]:
     opener = build_opener()
     timeout_seconds = get_timeout_seconds()
-    max_retries = get_max_retries()
+    max_retries = get_stream_max_retries()
     last_error = ""
 
     for attempt in range(1, max_retries + 1):
@@ -811,12 +874,20 @@ def stream_model(
             )
         except Exception as exc:
             last_error = format_upstream_error(exc)
-            if attempt >= max_retries:
-                raise RuntimeError(f"Upstream API request failed after {max_retries} attempts: {last_error}") from exc
+            if attempt >= max_retries or not is_retryable_upstream_error(exc, last_error):
+                break
             on_retry(attempt + 1, max_retries, last_error)
             time.sleep(retry_sleep_seconds(attempt))
 
-    raise RuntimeError(f"Upstream API request failed after {max_retries} attempts: {last_error}")
+    on_fallback(last_error)
+    try:
+        return call_model(question_text, prompt_text, config, reference_answer)
+    except Exception as exc:
+        fallback_error = format_upstream_error(exc)
+        raise RuntimeError(
+            f"Streaming failed after {max_retries} attempts: {last_error}; "
+            f"fallback non-stream request failed: {fallback_error}"
+        ) from exc
 
 
 def serialize_live_comparison(example: Dict[str, Any], config: ModelConfig) -> Dict[str, Any]:
@@ -909,7 +980,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
         return example, MODEL_CONFIGS[model_id]
 
-    def _handle_stream_run(self, example: Dict[str, Any], config: ModelConfig) -> None:
+    def _handle_stream_run(self, example: Dict[str, Any], config: ModelConfig, run_id: int | None) -> None:
         question = example["question"]
         reference_answer = example["answer"]
         archived = example["archived"][config.model_id]
@@ -924,6 +995,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
             "meta",
             {
                 "exampleId": example["id"],
+                "runId": run_id,
                 "model": model_payload(config),
                 "referenceAnswer": reference_answer,
             },
@@ -934,6 +1006,11 @@ class DemoHandler(SimpleHTTPRequestHandler):
         failures: list[str] = []
 
         def emit(event_name: str, payload: Dict[str, Any]) -> None:
+            if run_id is not None and "runId" not in payload:
+                payload = {
+                    "runId": run_id,
+                    **payload,
+                }
             events.put((event_name, payload))
 
         def runner(lane: str) -> None:
@@ -951,6 +1028,13 @@ class DemoHandler(SimpleHTTPRequestHandler):
                             "lane": lane,
                             "attempt": attempt,
                             "maxAttempts": max_attempts,
+                            "error": error_message,
+                        },
+                    ),
+                    on_fallback=lambda error_message: emit(
+                        "lane_fallback",
+                        {
+                            "lane": lane,
                             "error": error_message,
                         },
                     ),
@@ -993,11 +1077,12 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 self._send_sse_event(
                     "summary",
                     {
+                        "runId": run_id,
                         "model": model_payload(config),
                         "summary": compute_live_summary(results["direct"], results["trs"]),
                     },
                 )
-            self._send_sse_event("done", {"ok": not failures})
+            self._send_sse_event("done", {"runId": run_id, "ok": not failures})
             self.close_connection = True
         except BrokenPipeError:
             return
@@ -1008,6 +1093,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
         try:
             payload = self._read_json_body()
             example, config = self._resolve_request(payload)
+            run_id = payload.get("runId")
 
             if parsed.path == "/api/run":
                 live = serialize_live_comparison(example, config)
@@ -1021,7 +1107,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 return
 
             if parsed.path == "/api/run_stream":
-                self._handle_stream_run(example, config)
+                self._handle_stream_run(example, config, run_id)
                 return
 
             self._send_json({"error": f"Unknown endpoint: {parsed.path}"}, status=HTTPStatus.NOT_FOUND)
