@@ -183,6 +183,7 @@ class ModelConfig:
     max_tokens_param: str = "max_tokens"
     temperature_override: float | None = None
     extra_body: Dict[str, Any] | None = None
+    prefer_standard_request: bool = False
 
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
@@ -422,6 +423,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=22.0,
         output_price_yuan_per_million=110.0,
         supports_reasoning_trace=False,
+        prefer_standard_request=True,
     ),
     "grok4fast": ModelConfig(
         model_id="grok4fast",
@@ -520,6 +522,7 @@ def load_examples_payload() -> Dict[str, Any]:
             "apiModel": config.api_model,
             "supportsReasoningTrace": config.supports_reasoning_trace,
             "showsReasoningTrace": config.supports_reasoning_trace,
+            "prefersStandardRequest": config.prefer_standard_request,
             "maxTokens": config.max_tokens,
             "paperPricing": {
                 "inputYuanPerMillion": config.input_price_yuan_per_million,
@@ -1228,6 +1231,7 @@ def model_payload(config: ModelConfig) -> Dict[str, Any]:
         "apiModel": config.api_model,
         "supportsReasoningTrace": config.supports_reasoning_trace,
         "showsReasoningTrace": config.supports_reasoning_trace,
+        "prefersStandardRequest": config.prefer_standard_request,
         "maxTokens": config.max_tokens,
         "paperPricing": {
             "inputYuanPerMillion": config.input_price_yuan_per_million,
@@ -1280,6 +1284,9 @@ def stream_model(
     on_retry: Callable[[int, int, str], None],
     on_fallback: Callable[[str], None],
 ) -> Dict[str, Any]:
+    if config.prefer_standard_request:
+        return call_model(question_text, prompt_text, config, reference_answer)
+
     opener = build_opener()
     timeout_seconds = get_timeout_seconds()
     max_retries = get_stream_max_retries()

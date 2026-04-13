@@ -875,6 +875,10 @@ function updateRunStatus() {
     nodes.runStatus.textContent = `${retrying.join(" and ")} retrying automatically after an upstream drop.`;
     return;
   }
+  if (state.activeModel?.prefersStandardRequest) {
+    nodes.runStatus.textContent = `${state.activeModel.label} is running in usage-accurate mode. Waiting for the full result and token accounting.`;
+    return;
+  }
   if (doneCount === 0) {
     nodes.runStatus.textContent = "Streaming both runs. Chain of thought and response will appear as chunks arrive.";
     return;
