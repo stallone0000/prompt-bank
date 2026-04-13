@@ -125,9 +125,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "oss": ModelConfig(
         model_id="oss",
-        company="GPT-OSS",
+        company="GPT",
         provider="Qiniu",
-        family="GPT-OSS",
+        family="GPT",
         label="GPT-OSS-120B",
         api_model="qiniu/gpt-oss-120b",
         prompt_template=PROMPT_COD,
@@ -137,9 +137,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "oss20": ModelConfig(
         model_id="oss20",
-        company="GPT-OSS",
+        company="GPT",
         provider="Qiniu",
-        family="GPT-OSS",
+        family="GPT",
         label="GPT-OSS-20B",
         api_model="qiniu/gpt-oss-20b",
         prompt_template=PROMPT_COD,
@@ -490,14 +490,8 @@ def build_api_payload(prompt_text: str, config: ModelConfig, stream: bool) -> Di
     payload = {
         "model": config.api_model,
         "messages": [{"role": "user", "content": prompt_text}],
-        "content_filter": False,
         "stream": stream,
         "temperature": temperature,
-        "top_p": 0.9,
-        "top_k": 0,
-        "repetition_penalty": 1.05,
-        "num_beams": 1,
-        "user": "trs_demo_web",
     }
     payload[config.max_tokens_param] = config.max_tokens
     if config.extra_body:

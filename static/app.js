@@ -32,6 +32,7 @@ const nodes = {
   questionSubtitle: document.getElementById("questionSubtitle"),
   questionText: document.getElementById("questionText"),
   referenceAnswer: document.getElementById("referenceAnswer"),
+  currentModel: document.getElementById("currentModel"),
   verifierModel: document.getElementById("verifierModel"),
   skillCard: document.getElementById("skillCard"),
   runStatus: document.getElementById("runStatus"),
@@ -47,7 +48,6 @@ const nodes = {
 
 const FAMILY_ORDER = [
   "doubao",
-  "gptoss",
   "gpt",
   "glm",
   "qwen",
@@ -64,11 +64,6 @@ const FAMILY_META = {
     label: "Doubao",
     short: "DB",
     icon: "/icon/doubao-color.svg",
-  },
-  gptoss: {
-    label: "GPT-OSS",
-    short: "OSS",
-    icon: "/icon/openai.svg",
   },
   gpt: {
     label: "GPT",
@@ -159,9 +154,6 @@ function normalizeLookupValue(value) {
 
 function inferFamilyId(modelId, model) {
   const family = normalizeLookupValue(model?.family);
-  if (family === "gpt-oss") {
-    return "gptoss";
-  }
   if (family === "doubao") {
     return "doubao";
   }
@@ -196,9 +188,6 @@ function inferFamilyId(modelId, model) {
   const haystack = normalizeLookupValue(
     [model?.family, modelId, model?.label, model?.apiModel, model?.company].join(" ")
   );
-  if (haystack.includes("gpt-oss")) {
-    return "gptoss";
-  }
   if (haystack.includes("doubao")) {
     return "doubao";
   }
@@ -271,11 +260,6 @@ function familyMeta(familyId) {
     short: id.slice(0, 2).toUpperCase(),
     icon: null,
   };
-}
-
-function familyProviderLabel(entries, activeModelId) {
-  const selectedModel = entries.find(([modelId]) => modelId === activeModelId)?.[1] || entries[0]?.[1];
-  return selectedModel?.provider || selectedModel?.company || "Model family";
 }
 
 function familyCountLabel(entries) {
@@ -362,7 +346,7 @@ function renderModelSelector() {
     const title = document.createElement("strong");
     title.textContent = meta.label;
     const subtitle = document.createElement("span");
-    subtitle.textContent = familyProviderLabel(entries, selectedModelId);
+    subtitle.textContent = "Series";
     copy.append(title, subtitle);
 
     const count = document.createElement("span");
@@ -388,14 +372,30 @@ function renderModelSelector() {
     });
 
     select.value = selectedModelId;
-    select.addEventListener("change", (event) => {
-      const modelId = event.target.value;
+    const activateFamily = (modelId = select.value) => {
+      const wasActiveFamily = state.selectedFamilyId === family;
+      const wasActiveModel = state.modelId === modelId;
       state.selectedFamilyId = family;
       state.familySelections[family] = modelId;
       state.modelId = modelId;
-      renderModelSelector();
-      renderSelection();
-      clearLiveResults();
+      if (!wasActiveFamily || !wasActiveModel) {
+        renderModelSelector();
+        renderSelection();
+        clearLiveResults();
+      }
+    };
+
+    head.addEventListener("click", () => {
+      activateFamily(selectedModelId);
+    });
+    select.addEventListener("focus", () => {
+      activateFamily(select.value);
+    });
+    select.addEventListener("click", () => {
+      activateFamily(select.value);
+    });
+    select.addEventListener("change", (event) => {
+      activateFamily(event.target.value);
     });
 
     const metaLine = document.createElement("div");
@@ -446,6 +446,7 @@ function renderSelection() {
   nodes.questionSubtitle.textContent = example.subtitle;
   nodes.questionText.textContent = example.question;
   nodes.referenceAnswer.textContent = example.answer;
+  nodes.currentModel.textContent = state.payload.models[state.modelId]?.label || "-";
   nodes.verifierModel.textContent = state.payload.verifier?.model || "openai/gpt-5-mini";
   nodes.skillCard.textContent = archived.trs.skill_text;
   typesetMath([nodes.questionText, nodes.referenceAnswer, nodes.skillCard]);
