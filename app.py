@@ -500,7 +500,7 @@ def resolve_archived_example_for_model(
 def load_examples_payload() -> Dict[str, Any]:
     if not DATA_PATH.exists():
         raise FileNotFoundError(
-            f"Missing demo data file at {DATA_PATH}. Run `python scripts/build_demo_examples.py` first."
+            f"Missing checked-in demo data file at {DATA_PATH}."
         )
     with DATA_PATH.open("r", encoding="utf-8") as f:
         payload = json.load(f)

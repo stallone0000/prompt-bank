@@ -47,8 +47,8 @@ a {
 }
 
 .topbar {
-  min-height: 58px;
-  padding: 12px 16px;
+  min-height: 66px;
+  padding: 14px 18px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
@@ -66,13 +66,13 @@ a {
 .topbar-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
 .topbar-logo {
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 42px;
   flex: 0 0 auto;
 }
 
@@ -84,9 +84,9 @@ a {
 }
 
 .topbar h1 {
-  font-size: clamp(1.3rem, 2vw, 1.58rem);
+  font-size: clamp(1.56rem, 2.5vw, 1.96rem);
   font-weight: 700;
-  line-height: 1.14;
+  line-height: 1.08;
 }
 
 .topbar-meta {
@@ -144,7 +144,7 @@ a {
 }
 
 .sidebar-head h2 {
-  font-size: 1.06rem;
+  font-size: 1.18rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -190,7 +190,7 @@ a {
 }
 
 .mode-card strong {
-  font-size: 1.02rem;
+  font-size: 1.12rem;
   font-weight: 700;
 }
 
@@ -350,9 +350,9 @@ a {
 .field-label {
   display: block;
   margin-bottom: 0;
-  font-size: 0.9rem;
+  font-size: 1.02rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
 }

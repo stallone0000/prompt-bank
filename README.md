@@ -30,31 +30,27 @@ If you want a public URL, deploy the whole repository as a single Python service
 
 ## Local run
 
-1. Build the curated example file:
+The curated demo payloads are checked into the repository under `data/`, so no local rebuild step is required for normal use.
 
-```bash
-python scripts/build_demo_examples.py
-```
-
-2. Export the API key on the server side:
+1. Export the API key on the server side:
 
 ```bash
 export TRS_DEMO_API_KEY="your-360-api-key"
 ```
 
-3. Optional, if your environment needs the same internal proxy used by the experiments:
+2. Optional, if your environment needs the same internal proxy used by the experiments:
 
 ```bash
 export TRS_DEMO_PROXY_URL="http://proxy.so.qihoo.net:8003"
 ```
 
-4. Start the demo:
+3. Start the demo:
 
 ```bash
 python app.py
 ```
 
-5. Open:
+4. Open:
 
 ```text
 http://localhost:8080
@@ -119,10 +115,9 @@ docker run -p 8080:8080 -e TRS_DEMO_API_KEY="your-360-api-key" trs-demo
 6. Add `TRS_DEMO_PROXY_URL` only if the deployed environment cannot reach `http://api.360.cn` directly.
 7. Click deploy. Render will return a public `https://...onrender.com` URL.
 
-## Rebuild curated data
+## Data files
 
-If you change the example set, rerun:
+The deployable demo now reads its curated payloads directly from checked-in files in `data/`, including:
 
-```bash
-python scripts/build_demo_examples.py
-```
+- `data/demo_examples.json`
+- `data/trs_skill_corpus.jsonl`
