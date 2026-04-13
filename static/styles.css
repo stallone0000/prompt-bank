@@ -840,15 +840,26 @@ a {
 }
 
 .current-model-card {
+  width: 214px;
+  max-width: 214px;
+  flex: 0 0 214px;
+  overflow: hidden;
   border-color: rgba(193, 145, 29, 0.34);
   background: #fff7d9;
 }
 
 .current-model-card span {
+  flex: 0 0 auto;
   color: #936b10;
 }
 
 .current-model-card strong {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: #7f5a00;
 }
 
