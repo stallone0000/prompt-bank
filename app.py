@@ -25,6 +25,7 @@ from urllib.parse import urlparse
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 DATA_PATH = APP_DIR / "data" / "demo_examples.json"
+SKILL_CORPUS_PATH = APP_DIR / "data" / "trs_skill_corpus.jsonl"
 
 PROMPT_DIRECT = """You are a helpful and harmless assistant.
 Let's think step by step:
@@ -90,6 +91,11 @@ CLAUDE_THINKING_EXTRA_BODY = {
     "thinking": {
         "type": "enabled",
         "budget_tokens": 16000,
+    }
+}
+CLAUDE_ADAPTIVE_THINKING_EXTRA_BODY = {
+    "thinking": {
+        "type": "adaptive",
     }
 }
 TRS_SOURCE_LABELS = {
@@ -385,8 +391,8 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         prompt_template=PROMPT_TRYTO,
         input_price_yuan_per_million=18.576,
         output_price_yuan_per_million=92.88,
-        supports_reasoning_trace=False,
-        extra_body=CLAUDE_THINKING_EXTRA_BODY,
+        supports_reasoning_trace=True,
+        extra_body=CLAUDE_ADAPTIVE_THINKING_EXTRA_BODY,
     ),
     "claudehaiku45": ModelConfig(
         model_id="claudehaiku45",
@@ -542,10 +548,34 @@ def source_label_for_key(source_key: str) -> str:
     return TRS_SOURCE_LABELS.get(source_key, source_key.replace("_", " ").title())
 
 
-def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
-    entries: list[Dict[str, Any]] = []
-    doc_freq: Counter[str] = Counter()
-    seen_pairs: set[tuple[str, str]] = set()
+def normalize_answer_text(text: str) -> str:
+    return "".join(char for char in (text or "").lower() if char.isalnum())
+
+
+def iter_skill_corpus_records(payload: Dict[str, Any]) -> list[Dict[str, Any]]:
+    records: list[Dict[str, Any]] = []
+
+    if SKILL_CORPUS_PATH.exists():
+        with SKILL_CORPUS_PATH.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                source_key = (item.get("source_key") or "").strip()
+                records.append(
+                    {
+                        "question_id": item.get("question_id") or "",
+                        "question": (item.get("question") or "").strip(),
+                        "answer": (item.get("answer") or "").strip(),
+                        "topic": (item.get("topic") or "").strip(),
+                        "difficulty": item.get("difficulty"),
+                        "skill_text": (item.get("skill_text") or "").strip(),
+                        "skill_score": float(item.get("skill_score") or 0.0),
+                        "source_key": source_key,
+                        "source_label": (item.get("source_label") or source_label_for_key(source_key)).strip(),
+                    }
+                )
+        return records
 
     for source_key, path_str in payload.get("sources", {}).items():
         if not source_key.endswith("_trs"):
@@ -559,35 +589,55 @@ def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
                 if not line.strip():
                     continue
                 item = json.loads(line)
-                question = (item.get("question") or "").strip()
-                skill_text = (item.get("heuristic_used") or "").strip()
-                if not question or not skill_text:
-                    continue
-
-                dedupe_key = (question, skill_text)
-                if dedupe_key in seen_pairs:
-                    continue
-                seen_pairs.add(dedupe_key)
-
-                token_set = set(tokenize_retrieval_text(question))
-                if not token_set:
-                    continue
-
-                doc_freq.update(token_set)
-                entries.append(
+                records.append(
                     {
                         "question_id": item.get("question_id") or "",
-                        "question": question,
+                        "question": (item.get("question") or "").strip(),
                         "answer": (item.get("answer") or "").strip(),
                         "topic": (item.get("topic") or "").strip(),
                         "difficulty": item.get("difficulty"),
-                        "skill_text": skill_text,
+                        "skill_text": (item.get("heuristic_used") or "").strip(),
                         "skill_score": float(item.get("heuristic_score") or 0.0),
                         "source_key": source_key,
                         "source_label": source_label_for_key(source_key),
-                        "token_set": token_set,
                     }
                 )
+
+    return records
+
+
+def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
+    entries: list[Dict[str, Any]] = []
+    doc_freq: Counter[str] = Counter()
+    seen_pairs: set[tuple[str, str]] = set()
+
+    for item in iter_skill_corpus_records(payload):
+        question = item["question"]
+        skill_text = item["skill_text"]
+        if not question or not skill_text:
+            continue
+
+        dedupe_key = (question, skill_text)
+        if dedupe_key in seen_pairs:
+            continue
+        seen_pairs.add(dedupe_key)
+
+        question_token_set = set(tokenize_retrieval_text(question))
+        answer_token_set = set(tokenize_retrieval_text(item["answer"]))
+        combined_token_set = question_token_set | answer_token_set
+        if not combined_token_set:
+            continue
+
+        doc_freq.update(combined_token_set)
+        entries.append(
+            {
+                **item,
+                "question_token_set": question_token_set,
+                "answer_token_set": answer_token_set,
+                "combined_token_set": combined_token_set,
+                "normalized_answer": normalize_answer_text(item["answer"]),
+            }
+        )
 
     total_docs = len(entries)
     idf = {
@@ -601,43 +651,60 @@ def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def retrieve_skill_entry(question: str, corpus: Dict[str, Any]) -> Dict[str, Any]:
+def retrieve_skill_entry(question: str, reference_answer: str, corpus: Dict[str, Any]) -> Dict[str, Any]:
     query = (question or "").strip()
     if not query:
         raise ValueError("Custom mode requires a non-empty question.")
 
-    query_tokens = set(tokenize_retrieval_text(query))
-    if not query_tokens:
+    question_tokens = set(tokenize_retrieval_text(query))
+    answer_tokens = set(tokenize_retrieval_text(reference_answer))
+    normalized_answer = normalize_answer_text(reference_answer)
+    if not question_tokens and not answer_tokens:
         raise ValueError("The custom question is too short to retrieve a skill card.")
 
     entries = corpus.get("entries", [])
     if not entries:
-        raise ValueError("No local TRS skill corpus is available for retrieval.")
+        raise ValueError("No deployable TRS skill corpus is available for retrieval.")
 
     best_entry: Dict[str, Any] | None = None
     best_score = float("-inf")
+    best_overlap: set[str] = set()
 
     for entry in entries:
-        overlap = query_tokens & entry["token_set"]
-        if not overlap:
+        question_overlap = question_tokens & entry["question_token_set"]
+        answer_overlap = answer_tokens & entry["answer_token_set"]
+        exact_answer_match = bool(normalized_answer) and normalized_answer == entry["normalized_answer"]
+        overlap = question_overlap | answer_overlap
+        if not overlap and not exact_answer_match:
             continue
 
-        lexical_score = sum(corpus["idf"].get(token, 1.0) for token in overlap)
-        coverage = len(overlap) / max(1, len(query_tokens))
-        density = len(overlap) / max(1, len(entry["token_set"]))
-        score = lexical_score * (0.8 + 0.2 * coverage) + density + entry["skill_score"] * 0.004
+        question_score = sum(corpus["idf"].get(token, 1.0) for token in question_overlap)
+        answer_score = sum(corpus["idf"].get(token, 1.0) for token in answer_overlap)
+        coverage = len(question_overlap) / max(1, len(question_tokens)) if question_tokens else 0.0
+        answer_coverage = len(answer_overlap) / max(1, len(answer_tokens)) if answer_tokens else 0.0
+        density = len(overlap) / max(1, len(entry["combined_token_set"]))
+        score = (
+            question_score * (0.76 + 0.24 * coverage)
+            + answer_score * (1.1 + 0.4 * answer_coverage)
+            + density
+            + entry["skill_score"] * 0.004
+        )
+        if exact_answer_match:
+            score += 2.5
         if score > best_score:
             best_score = score
             best_entry = entry
+            best_overlap = overlap
 
     if best_entry is None:
         best_entry = max(entries, key=lambda item: item["skill_score"])
         best_score = best_entry["skill_score"] * 0.004
+        best_overlap = set()
 
     return {
         **best_entry,
         "retrieval_score": round(best_score, 4),
-        "matched_tokens": sorted(query_tokens & best_entry["token_set"]),
+        "matched_tokens": sorted(best_overlap),
     }
 
 
@@ -667,7 +734,7 @@ def build_custom_example(question: str, reference_answer: str, retrieval: Dict[s
             f"Matched to {retrieval['source_label']}"
             + (f" · {retrieval['topic']}" if retrieval.get("topic") else "")
         ),
-        "highlight": "Skill card retrieved from the local TRS archive using lexical overlap.",
+        "highlight": "Skill card retrieved from the deployable DeepMath-103K TRS archive using lexical overlap.",
         "question": question.strip(),
         "answer": reference_answer.strip(),
         "topic": "Custom Input",
@@ -1060,12 +1127,60 @@ def build_result(
     }
 
 
+def extract_content_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            parts.append(extract_content_text(item))
+        return "".join(part for part in parts if part)
+    if isinstance(value, dict):
+        for key in ("text", "content", "value"):
+            if key in value:
+                return extract_content_text(value[key])
+    return ""
+
+
 def extract_reasoning_text(message: Dict[str, Any]) -> str:
-    return message.get("reasoning_content", "") or ""
+    reasoning_value = message.get("reasoning_content")
+    if reasoning_value not in (None, "", []):
+        return extract_content_text(reasoning_value)
+
+    content = message.get("content")
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            block_type = str(block.get("type") or "").lower()
+            if block_type in {"reasoning", "thinking", "reasoning_text", "thinking_text"}:
+                text = extract_content_text(block)
+                if text:
+                    parts.append(text)
+        if parts:
+            return "".join(parts)
+    return ""
 
 
 def extract_answer_text(message: Dict[str, Any]) -> str:
-    return message.get("content", "") or ""
+    content = message.get("content", "")
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if not isinstance(block, dict):
+                text = extract_content_text(block)
+                if text:
+                    parts.append(text)
+                continue
+            block_type = str(block.get("type") or "").lower()
+            if block_type in {"reasoning", "thinking", "reasoning_text", "thinking_text"}:
+                continue
+            text = extract_content_text(block)
+            if text:
+                parts.append(text)
+        return "".join(parts)
+    return extract_content_text(content)
 
 
 def compute_live_summary(direct: Dict[str, Any], trs: Dict[str, Any]) -> Dict[str, Any]:
@@ -1307,7 +1422,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
             raise ValueError("Custom mode requires a question.")
         if not reference_answer:
             raise ValueError("Custom mode requires a reference answer.")
-        retrieval = retrieve_skill_entry(question, self.server.skill_corpus)
+        retrieval = retrieve_skill_entry(question, reference_answer, self.server.skill_corpus)
         return build_custom_example(question, reference_answer, retrieval)
 
     def _resolve_request(self, payload: Dict[str, Any]) -> tuple[Dict[str, Any], ModelConfig]:
@@ -1499,6 +1614,10 @@ class DemoServer(ThreadingHTTPServer):
         self.examples_payload = payload
         self.examples_by_id = {example["id"]: example for example in payload["examples"]}
         self.skill_corpus = build_skill_corpus(payload)
+        self.examples_payload["skillCorpus"] = {
+            "docCount": self.skill_corpus["doc_count"],
+            "label": "DeepMath-103K TRS archive",
+        }
 
 
 def main() -> None:

@@ -118,6 +118,8 @@ a {
 }
 
 .sidebar {
+  display: grid;
+  gap: 12px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -136,25 +138,74 @@ a {
   color: var(--muted);
 }
 
-.custom-panel {
+.mode-card-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 14px;
-  padding: 10px;
-  border: 1px solid rgba(31, 31, 31, 0.06);
+}
+
+.mode-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid rgba(31, 31, 31, 0.08);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
 }
 
-.custom-panel .sidebar-head {
-  margin-bottom: 2px;
+.mode-card:hover,
+.mode-card.active {
+  border-color: rgba(16, 163, 127, 0.3);
+  background: #ffffff;
 }
 
+.mode-card.active {
+  transform: translateY(-1px);
+}
+
+.mode-card-kicker,
 .custom-label {
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  color: var(--muted);
+}
+
+.mode-card strong {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.mode-card small {
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.4;
+}
+
+.sidebar-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(31, 31, 31, 0.06);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.custom-input-panel {
+  align-content: start;
+}
+
+.custom-meta,
+.custom-status {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
   color: var(--muted);
 }
 
@@ -180,39 +231,9 @@ a {
   box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.1);
 }
 
-.secondary-button {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: #ffffff;
-  color: var(--ink);
-  cursor: pointer;
-  font-weight: 600;
-  transition: border-color 140ms ease, background 140ms ease;
-}
-
-.secondary-button:hover:not(:disabled) {
-  border-color: rgba(16, 163, 127, 0.35);
-  background: #f9fdfb;
-}
-
-.secondary-button:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
-.custom-status {
-  margin: 0;
-  font-size: 0.74rem;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
 .example-list {
   display: grid;
   gap: 8px;
-  margin-top: 12px;
 }
 
 .example-card {
@@ -859,6 +880,10 @@ a {
   }
 
   .model-group-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-card-grid {
     grid-template-columns: 1fr;
   }
 

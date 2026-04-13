@@ -11,6 +11,10 @@ const state = {
   },
   customContext: null,
   customDirty: false,
+  customLookupPending: false,
+  customLookupTimer: null,
+  customLookupRequestId: 0,
+  customLookupAbortController: null,
   running: false,
   activeModel: null,
   streamProgress: {
@@ -34,11 +38,16 @@ const state = {
 
 const STREAM_CONNECT_MAX_RETRIES = 4;
 const RUN_RESTART_MAX_RETRIES = 3;
+const CUSTOM_LOOKUP_DEBOUNCE_MS = 360;
 
 const nodes = {
+  examplesModeButton: document.getElementById("examplesModeButton"),
+  customModeButton: document.getElementById("customModeButton"),
+  examplesPanel: document.getElementById("examplesPanel"),
+  customPanel: document.getElementById("customPanel"),
   customQuestion: document.getElementById("customQuestion"),
   customAnswer: document.getElementById("customAnswer"),
-  applyCustomButton: document.getElementById("applyCustomButton"),
+  customCorpusMeta: document.getElementById("customCorpusMeta"),
   customStatus: document.getElementById("customStatus"),
   exampleList: document.getElementById("exampleList"),
   modelCount: document.getElementById("modelCount"),
@@ -464,9 +473,39 @@ function selectedExample() {
   return state.payload.examples.find((example) => example.id === state.exampleId);
 }
 
+function renderSourcePanels() {
+  const customActive = state.sourceMode === "custom";
+  nodes.examplesModeButton.classList.toggle("active", !customActive);
+  nodes.customModeButton.classList.toggle("active", customActive);
+  nodes.examplesPanel.classList.toggle("hidden", customActive);
+  nodes.customPanel.classList.toggle("hidden", !customActive);
+}
+
+function buildCustomDraftContext() {
+  const question = state.customDraft.question.trim();
+  const answer = state.customDraft.answer.trim();
+  return {
+    id: "custom-problem-draft",
+    title: question ? "Custom Problem" : "Custom Problem",
+    subtitle: state.customLookupPending
+      ? "Searching the DeepMath-103K TRS archive..."
+      : "Type both the question and the reference answer to retrieve a matching skill card.",
+    question: question || "Enter a custom problem to search the DeepMath-103K TRS archive.",
+    answer: answer || "—",
+    topic: "Custom Input",
+    difficulty: state.customLookupPending ? "Searching" : "Awaiting Retrieval",
+    skillText: state.customLookupPending
+      ? "(Searching the DeepMath-103K skill archive...)"
+      : "(No skill card retrieved yet.)",
+  };
+}
+
 function currentProblemContext() {
-  if (state.sourceMode === "custom" && state.customContext) {
-    return state.customContext;
+  if (state.sourceMode === "custom") {
+    if (state.customContext && !state.customDirty) {
+      return state.customContext;
+    }
+    return buildCustomDraftContext();
   }
   return selectedExample();
 }
@@ -480,17 +519,47 @@ function describeCustomMatch(custom) {
   if (retrieval.matchedTopic) {
     parts.push(retrieval.matchedTopic);
   }
+  if (Number.isFinite(retrieval.score)) {
+    parts.push(`score ${retrieval.score.toFixed(2)}`);
+  }
   return parts.join(" · ") || "Retrieved skill card ready.";
 }
 
-function applyCustomSelection(custom) {
+function cancelCustomLookup() {
+  if (state.customLookupTimer) {
+    window.clearTimeout(state.customLookupTimer);
+    state.customLookupTimer = null;
+  }
+  if (state.customLookupAbortController) {
+    state.customLookupAbortController.abort();
+    state.customLookupAbortController = null;
+  }
+  state.customLookupPending = false;
+}
+
+function setSourceMode(mode) {
+  if (mode === "example") {
+    cancelCustomLookup();
+  }
+  state.sourceMode = mode;
+  renderSourcePanels();
+  renderExamples();
+  renderSelection();
+}
+
+function applyCustomSelection(custom, options = {}) {
+  const { clearResults = true } = options;
   state.customContext = custom;
   state.sourceMode = "custom";
   state.customDirty = false;
+  state.customLookupPending = false;
   nodes.customStatus.textContent = describeCustomMatch(custom);
+  renderSourcePanels();
   renderExamples();
   renderSelection();
-  clearLiveResults();
+  if (clearResults) {
+    clearLiveResults();
+  }
 }
 
 function syncCustomDraftFromInputs() {
@@ -503,16 +572,15 @@ function syncCustomDraftFromInputs() {
 function markCustomDirty() {
   syncCustomDraftFromInputs();
   state.customDirty = true;
-  if (state.sourceMode === "custom") {
-    nodes.customStatus.textContent = "Custom problem changed. Retrieve again or press Run to refresh the skill card.";
+  if (state.sourceMode !== "custom") {
+    return;
   }
+  renderSelection();
+  scheduleCustomLookup();
 }
 
-async function prepareCustomProblem() {
-  if (state.running) {
-    throw new Error("Stop the current run before preparing a new custom problem.");
-  }
-
+async function prepareCustomProblem(options = {}) {
+  const { clearResults = true } = options;
   syncCustomDraftFromInputs();
   const question = state.customDraft.question.trim();
   const answer = state.customDraft.answer.trim();
@@ -520,8 +588,16 @@ async function prepareCustomProblem() {
     throw new Error("Custom mode requires both a question and a reference answer.");
   }
 
-  nodes.applyCustomButton.disabled = true;
+  const requestId = state.customLookupRequestId + 1;
+  state.customLookupRequestId = requestId;
+  if (state.customLookupAbortController) {
+    state.customLookupAbortController.abort();
+  }
+  const controller = new AbortController();
+  state.customLookupAbortController = controller;
+  state.customLookupPending = true;
   nodes.customStatus.textContent = "Retrieving the closest TRS skill card...";
+  renderSelection();
 
   try {
     const response = await fetch("/api/retrieve_skill", {
@@ -530,6 +606,7 @@ async function prepareCustomProblem() {
         "Content-Type": "application/json",
       },
       cache: "no-store",
+      signal: controller.signal,
       body: JSON.stringify({
         question,
         referenceAnswer: answer,
@@ -539,11 +616,47 @@ async function prepareCustomProblem() {
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || "Failed to retrieve a skill card.");
     }
-    applyCustomSelection(payload.custom);
+    if (requestId !== state.customLookupRequestId) {
+      return null;
+    }
+    applyCustomSelection(payload.custom, { clearResults });
     return payload.custom;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return null;
+    }
+    state.customLookupPending = false;
+    nodes.customStatus.textContent = error instanceof Error ? error.message : String(error);
+    renderSelection();
+    throw error;
   } finally {
-    nodes.applyCustomButton.disabled = false;
+    if (requestId === state.customLookupRequestId) {
+      state.customLookupPending = false;
+      state.customLookupAbortController = null;
+      renderSelection();
+    }
   }
+}
+
+function scheduleCustomLookup() {
+  if (state.sourceMode !== "custom") {
+    return;
+  }
+  cancelCustomLookup();
+  const question = state.customDraft.question.trim();
+  const answer = state.customDraft.answer.trim();
+  if (!question || !answer) {
+    nodes.customStatus.textContent = "Enter both the question and the reference answer to start the DeepMath skill search.";
+    renderSelection();
+    return;
+  }
+  state.customLookupPending = true;
+  nodes.customStatus.textContent = "Searching DeepMath-103K skill cards...";
+  renderSelection();
+  state.customLookupTimer = window.setTimeout(() => {
+    state.customLookupTimer = null;
+    void prepareCustomProblem({ clearResults: true }).catch(() => {});
+  }, CUSTOM_LOOKUP_DEBOUNCE_MS);
 }
 
 function renderExamples() {
@@ -557,11 +670,9 @@ function renderExamples() {
       button.classList.add("active");
     }
     button.addEventListener("click", () => {
-      state.sourceMode = "example";
       state.exampleId = example.id;
-      nodes.customStatus.textContent = "Using a curated example. Retrieve a custom skill card to switch back.";
-      renderExamples();
-      renderSelection();
+      nodes.customStatus.textContent = "Switch back to Custom Problem to search the DeepMath skill archive.";
+      setSourceMode("example");
       clearLiveResults();
     });
     nodes.exampleList.appendChild(fragment);
@@ -570,20 +681,27 @@ function renderExamples() {
 
 function renderSelection() {
   const problem = currentProblemContext();
-  const isCustom = state.sourceMode === "custom" && state.customContext;
+  const isCustom = state.sourceMode === "custom";
+  const isResolvedCustom = isCustom && state.customContext && !state.customDirty;
   nodes.topicBadge.textContent = isCustom
     ? "Custom Input"
     : problem.topic.split(" -> ").slice(-2).join(" • ");
   nodes.difficultyBadge.textContent = isCustom
-    ? "Retrieved Skill"
+    ? isResolvedCustom
+      ? "Retrieved Skill"
+      : state.customLookupPending
+        ? "Searching"
+        : "Awaiting Retrieval"
     : `Difficulty ${problem.difficulty}`;
-  nodes.questionTitle.textContent = isCustom ? problem.title : problem.title;
-  nodes.questionSubtitle.textContent = isCustom ? problem.subtitle : problem.subtitle;
+  nodes.questionTitle.textContent = problem.title;
+  nodes.questionSubtitle.textContent = problem.subtitle;
   nodes.questionText.textContent = problem.question;
   nodes.referenceAnswer.textContent = problem.answer;
   nodes.currentModel.textContent = state.payload.models[state.modelId]?.label || "-";
   nodes.verifierModel.textContent = state.payload.verifier?.model || "openai/gpt-5-mini";
-  nodes.skillCard.textContent = isCustom ? problem.skillText : problem.archived[state.modelId].trs.skill_text;
+  nodes.skillCard.textContent = isCustom
+    ? problem.skillText
+    : problem.archived[state.modelId].trs.skill_text;
   typesetMath([nodes.questionText, nodes.referenceAnswer, nodes.skillCard]);
 }
 
@@ -1137,18 +1255,25 @@ async function boot() {
   initializeFamilySelections();
   nodes.customQuestion.value = state.customDraft.question;
   nodes.customAnswer.value = state.customDraft.answer;
+  const corpusMeta = state.payload.skillCorpus || {};
+  nodes.customCorpusMeta.textContent = corpusMeta.docCount
+    ? `Live retrieval over ${formatNumber(corpusMeta.docCount)} deployable skills from ${corpusMeta.label || "DeepMath-103K"}.`
+    : "Live retrieval over the deployable DeepMath-103K skill archive.";
   renderModelSelector();
+  renderSourcePanels();
   renderExamples();
   renderSelection();
   clearLiveResults();
   nodes.runButton.addEventListener("click", runComparison);
   nodes.stopButton.addEventListener("click", stopAndClearRun);
-  nodes.applyCustomButton.addEventListener("click", async () => {
-    try {
-      await prepareCustomProblem();
-    } catch (error) {
-      nodes.customStatus.textContent = error instanceof Error ? error.message : String(error);
-    }
+  nodes.examplesModeButton.addEventListener("click", () => {
+    setSourceMode("example");
+    clearLiveResults();
+  });
+  nodes.customModeButton.addEventListener("click", () => {
+    setSourceMode("custom");
+    nodes.customQuestion.focus();
+    scheduleCustomLookup();
   });
   nodes.customQuestion.addEventListener("input", markCustomDirty);
   nodes.customAnswer.addEventListener("input", markCustomDirty);

@@ -48,15 +48,36 @@
 
       <main class="workspace">
         <aside class="sidebar">
-          <section class="custom-panel">
+          <div class="mode-card-grid">
+            <button id="examplesModeButton" class="mode-card active" type="button">
+              <span class="mode-card-kicker">Browse</span>
+              <strong>Curated Examples</strong>
+              <small>Use the paper's selected DeepMath problems.</small>
+            </button>
+            <button id="customModeButton" class="mode-card" type="button">
+              <span class="mode-card-kicker">Search</span>
+              <strong>Custom Problem</strong>
+              <small>Type your own question and retrieve a skill card live.</small>
+            </button>
+          </div>
+
+          <section id="examplesPanel" class="sidebar-panel">
+            <div class="sidebar-head">
+              <h2>Curated Examples</h2>
+            </div>
+            <div id="exampleList" class="example-list"></div>
+          </section>
+
+          <section id="customPanel" class="sidebar-panel custom-input-panel hidden">
             <div class="sidebar-head">
               <h2>Custom Problem</h2>
             </div>
+            <p id="customCorpusMeta" class="custom-meta"></p>
             <label class="custom-label" for="customQuestion">Question</label>
             <textarea
               id="customQuestion"
               class="custom-textarea"
-              rows="6"
+              rows="7"
               placeholder="Paste your own problem here."
             ></textarea>
             <label class="custom-label" for="customAnswer">Reference Answer</label>
@@ -64,17 +85,12 @@
               id="customAnswer"
               class="custom-textarea compact"
               rows="2"
-              placeholder="Required. Used for verifier checking."
+              placeholder="Required. Live retrieval uses both the question and answer."
             ></textarea>
-            <button id="applyCustomButton" class="secondary-button" type="button">Retrieve Skill Card</button>
             <p id="customStatus" class="custom-status">
-              Question and reference answer are both required.
+              Enter both fields to start the DeepMath skill search.
             </p>
           </section>
-          <div class="sidebar-head">
-            <h2>Curated Examples</h2>
-          </div>
-          <div id="exampleList" class="example-list"></div>
         </aside>
 
         <section class="stage">
