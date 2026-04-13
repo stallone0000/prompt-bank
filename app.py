@@ -96,6 +96,8 @@ CLAUDE_THINKING_EXTRA_BODY = {
 CLAUDE_ADAPTIVE_THINKING_EXTRA_BODY = {
     "thinking": {
         "type": "adaptive",
+        "effort": "high",
+        "display": "summarized",
     }
 }
 TRS_SOURCE_LABELS = {
