@@ -90,7 +90,7 @@ RETRYABLE_HTTP_DETAIL_SNIPPETS = (
 CLAUDE_THINKING_EXTRA_BODY = {
     "thinking": {
         "type": "enabled",
-        "budget_tokens": 16000,
+        "budget_tokens": 20000,
     }
 }
 CLAUDE_ADAPTIVE_THINKING_EXTRA_BODY = {
@@ -382,6 +382,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         output_price_yuan_per_million=273.75,
         supports_reasoning_trace=False,
         extra_body=CLAUDE_THINKING_EXTRA_BODY,
+        temperature_override=1.0,
     ),
     "claudesonnet46": ModelConfig(
         model_id="claudesonnet46",
@@ -408,6 +409,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         output_price_yuan_per_million=36.0,
         supports_reasoning_trace=False,
         extra_body=CLAUDE_THINKING_EXTRA_BODY,
+        temperature_override=1.0,
     ),
     "grok4": ModelConfig(
         model_id="grok4",
