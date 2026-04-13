@@ -847,7 +847,7 @@ a {
 
 .context-stack {
   display: grid;
-  gap: 2px;
+  gap: 6px;
 }
 
 .question-summary,
@@ -954,26 +954,35 @@ a {
 }
 
 .skill-panel.collapse-panel {
-  border-radius: 999px;
-  box-shadow: none;
+  border-radius: 18px;
 }
 
 .skill-panel.collapse-panel summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.skill-panel-title {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 6px 12px;
+  min-width: 0;
+  line-height: 1.1;
 }
 
 .skill-panel.collapse-panel summary::after {
-  margin-left: auto;
   float: none;
+  justify-self: end;
+  line-height: 1;
 }
 
 .skill-panel.collapse-panel[open] {
   border-radius: 18px;
-  box-shadow: var(--shadow);
 }
 
 .skill-panel.collapse-panel[open] summary {
