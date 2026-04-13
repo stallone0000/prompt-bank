@@ -1247,7 +1247,7 @@ function renderLiveSummary(summary) {
 }
 
 function openTracePanels() {
-  document.querySelectorAll(".trace-panel").forEach((panel) => {
+  document.querySelectorAll(".comparison-panel .trace-panel").forEach((panel) => {
     panel.open = true;
   });
 }
