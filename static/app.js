@@ -854,7 +854,7 @@ function renderLiveMetrics(container, result) {
     metricRow("Output tokens (CoT + response)", formatMaybeNumber(result.completion_tokens), "accent"),
     metricRow("Cost (input + output pricing)", formatMaybeYuan(result.cost_yuan)),
     metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
-    metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status))
+    metricRow("Verifier verdict", formatVerifierVerdict(correctness), verdictTone(correctness.status))
   ];
   if (result.stop_label) {
     rows.push(
@@ -876,6 +876,17 @@ function verdictTone(status) {
     return "warning";
   }
   return "muted";
+}
+
+function formatVerifierVerdict(correctness) {
+  const label = correctness.label || "Verifier Unclear";
+  if (correctness.status === "correct") {
+    return `✅ ${label}`;
+  }
+  if (correctness.status === "incorrect") {
+    return `❌ ${label}`;
+  }
+  return `❔ ${label}`;
 }
 
 function renderLiveSummary(summary) {

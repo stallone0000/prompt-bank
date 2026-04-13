@@ -71,8 +71,8 @@ a {
 }
 
 .topbar-logo-shell {
-  width: 56px;
-  height: 56px;
+  width: 66px;
+  height: 66px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -84,8 +84,8 @@ a {
 }
 
 .topbar-logo {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   display: block;
 }
 
@@ -406,15 +406,17 @@ a {
 
 .model-group-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
   gap: 6px;
 }
 
 .model-group-card {
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(0, auto) minmax(118px, 1fr);
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 6px 8px;
   border: 1px solid #ece8e2;
   border-radius: 10px;
   background: #fcfcfa;
@@ -435,7 +437,7 @@ a {
 .model-group-head {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
   cursor: pointer;
 }
@@ -472,14 +474,16 @@ a {
 
 .model-group-copy strong {
   display: block;
-  font-size: 0.79rem;
+  font-size: 0.78rem;
   line-height: 1.2;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .model-group-select {
   width: 100%;
-  padding: 7px 30px 7px 9px;
+  min-width: 0;
+  padding: 6px 28px 6px 9px;
   border: 1px solid #d8d1c8;
   border-radius: 10px;
   background-color: var(--panel);
@@ -492,8 +496,8 @@ a {
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
   color: var(--ink);
-  font-size: 0.79rem;
-  line-height: 1.2;
+  font-size: 0.78rem;
+  line-height: 1.15;
   appearance: none;
   cursor: pointer;
 }
@@ -506,38 +510,50 @@ a {
 
 .control-actions {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
   flex-wrap: wrap;
 }
 
 .verifier-card {
-  min-width: 136px;
-  padding: 7px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel-soft);
+  white-space: nowrap;
 }
 
 .verifier-card span {
-  display: block;
-  font-size: 0.64rem;
+  display: inline-block;
+  flex: 0 0 auto;
+  font-size: 0.62rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 .verifier-card strong {
-  display: block;
-  margin-top: 3px;
+  display: inline-block;
+  min-width: 0;
+  margin-top: 0;
   font-size: 0.82rem;
-  line-height: 1.3;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 210px;
 }
 
 .verifier-select {
-  width: 100%;
-  margin-top: 5px;
-  padding: 7px 28px 7px 10px;
+  width: auto;
+  min-width: 152px;
+  margin-top: 0;
+  padding: 6px 28px 6px 10px;
   border: 1px solid #d8d1c8;
   border-radius: 10px;
   background-color: #ffffff;
@@ -553,6 +569,7 @@ a {
   font-size: 0.8rem;
   line-height: 1.3;
   appearance: none;
+  white-space: nowrap;
 }
 
 .verifier-select:focus {
@@ -562,16 +579,16 @@ a {
 }
 
 .current-model-card {
-  border-color: rgba(184, 63, 47, 0.24);
-  background: #fff2ef;
+  border-color: rgba(193, 145, 29, 0.34);
+  background: #fff7d9;
 }
 
 .current-model-card span {
-  color: #a34739;
+  color: #936b10;
 }
 
 .current-model-card strong {
-  color: #b83f2f;
+  color: #7f5a00;
 }
 
 .run-button,

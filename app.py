@@ -164,6 +164,8 @@ Official answer:
 
 Candidate model answer:
 {candidate_answer}
+
+Respond with exactly one token: CORRECT or INCORRECT.
 """.strip()
 
 
@@ -943,12 +945,46 @@ def merge_usage(existing: Dict[str, Any], incoming: Dict[str, Any] | None) -> Di
 
 
 def parse_verifier_verdict(content: str) -> str:
-    first_line = content.splitlines()[0].strip().upper() if content else ""
-    if "INCORRECT" in first_line:
+    normalized = (content or "").strip()
+    if not normalized:
+        return "UNKNOWN"
+
+    upper = normalized.upper()
+    exact = re.fullmatch(r"[\s\"'`*\-:]*?(CORRECT|INCORRECT)[\s\"'`*.:!?\-]*", upper)
+    if exact:
+        return exact.group(1)
+
+    verdict_patterns = [
+        r"\bFINAL(?:\s+VERDICT)?\s*[:：-]?\s*(CORRECT|INCORRECT)\b",
+        r"\bVERDICT\s*[:：-]?\s*(CORRECT|INCORRECT)\b",
+        r"\bRESULT\s*[:：-]?\s*(CORRECT|INCORRECT)\b",
+        r"\bANSWER\s*[:：-]?\s*(CORRECT|INCORRECT)\b",
+    ]
+    for pattern in verdict_patterns:
+        match = re.search(pattern, upper)
+        if match:
+            return match.group(1)
+
+    tokens = re.findall(r"\b(?:CORRECT|INCORRECT)\b", upper)
+    if len(tokens) == 1:
+        return tokens[0]
+    if "INCORRECT" in tokens:
         return "INCORRECT"
-    if "CORRECT" in first_line:
+    if "CORRECT" in tokens:
         return "CORRECT"
-    return first_line or "UNKNOWN"
+
+    semantic_patterns = [
+        (r"\bDO(?:ES)?\s+NOT\s+MATCH\b", "INCORRECT"),
+        (r"\bNOT\s+EQUIVALENT\b", "INCORRECT"),
+        (r"\bMATCH(?:ES)?\b", "CORRECT"),
+        (r"\bEQUIVALENT\b", "CORRECT"),
+    ]
+    for pattern, verdict in semantic_patterns:
+        if re.search(pattern, upper):
+            return verdict
+
+    first_nonempty_line = next((line.strip() for line in normalized.splitlines() if line.strip()), "")
+    return first_nonempty_line.upper() or "UNKNOWN"
 
 
 def env_int(name: str, default: int, minimum: int = 1) -> int:
