@@ -351,12 +351,22 @@ a {
 
 .example-group-card:hover,
 .example-group-card.active {
-  border-color: rgba(16, 163, 127, 0.28);
+  border-color: rgba(16, 163, 127, 0.34);
   background: #ffffff;
+}
+
+.example-group-card.active {
+  border-color: rgba(16, 163, 127, 0.58);
+  background: #f0fbf5;
+  box-shadow: 0 8px 18px rgba(16, 163, 127, 0.1);
 }
 
 .example-group-card.open {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.example-group-card.active.open {
+  box-shadow: 0 8px 20px rgba(16, 163, 127, 0.12);
 }
 
 .example-group-header,
@@ -405,6 +415,11 @@ a {
   white-space: nowrap;
 }
 
+.example-group-card.active .example-group-count {
+  background: #ddf6e9;
+  color: #0f8f5f;
+}
+
 .example-group-title {
   display: block;
   font-size: 0.92rem;
@@ -437,6 +452,11 @@ a {
 
 .example-group-trigger:hover {
   border-color: #c9c2b8;
+  background: #ffffff;
+}
+
+.example-group-card.active .example-group-trigger {
+  border-color: rgba(16, 163, 127, 0.4);
   background: #ffffff;
 }
 
@@ -509,8 +529,9 @@ a {
 }
 
 .example-option-card.active {
-  border-color: rgba(16, 163, 127, 0.34);
-  background: #f3fbf7;
+  border-color: rgba(16, 163, 127, 0.58);
+  background: #ebf8f1;
+  box-shadow: inset 0 0 0 1px rgba(16, 163, 127, 0.14);
 }
 
 .example-option-index {
@@ -529,8 +550,9 @@ a {
 }
 
 .example-option-card.active .example-option-index {
-  border-color: rgba(16, 163, 127, 0.28);
+  border-color: rgba(16, 163, 127, 0.42);
   color: var(--accent);
+  background: #effaf5;
 }
 
 .example-option-text {
@@ -586,7 +608,7 @@ a {
 .model-picker-shell {
   min-width: 0;
   display: grid;
-  gap: 0;
+  gap: 1px;
 }
 
 .picker-copy {
@@ -596,11 +618,8 @@ a {
 }
 
 .picker-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 2px 8px;
-  flex-wrap: wrap;
+  display: block;
+  margin: 0;
 }
 
 .picker-tools {
@@ -608,8 +627,9 @@ a {
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  flex: 1 1 420px;
+  flex: none;
   flex-wrap: wrap;
+  margin-bottom: 1px;
 }
 
 .picker-note {
@@ -925,14 +945,17 @@ a {
 .skill-card-source {
   color: var(--muted);
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .skill-panel-title {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  line-height: 1.1;
+  line-height: 1;
 }
 
 .skill-card {
@@ -1133,6 +1156,9 @@ a {
 .skill-panel.trace-panel summary {
   display: flex;
   align-items: center;
+  min-height: 34px;
+  padding: 9px 14px;
+  line-height: 1;
 }
 
 .trace-panel pre {
