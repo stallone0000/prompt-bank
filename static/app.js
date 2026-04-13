@@ -6,6 +6,7 @@ const state = {
   selectedFamilyId: null,
   familySelections: {},
   exampleId: null,
+  openExampleGroupId: null,
   examplePreviewCache: {},
   exampleLookupPending: false,
   exampleLookupRequestId: 0,
@@ -579,19 +580,14 @@ function renderSkillDatasetControls() {
       updateSkillDatasetMeta();
       clearLiveResults();
       try {
-        const preloadExamples = prepareExamplePreview({ clearResults: false, force: true });
         if (state.sourceMode === "custom") {
           if (!state.customDirty && state.customDraft.question.trim() && state.customDraft.answer.trim()) {
-            await Promise.all([
-              preloadExamples,
-              prepareCustomProblem({ clearResults: false, force: true }),
-            ]);
+            await prepareCustomProblem({ clearResults: false, force: true });
           } else {
-            await preloadExamples;
             renderSelection();
           }
         } else {
-          await preloadExamples;
+          await prepareExamplePreview({ clearResults: false, force: true });
         }
       } catch (error) {
         nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
@@ -622,20 +618,12 @@ function currentExamplePreview() {
   return state.examplePreviewCache[examplePreviewCacheKey()] || null;
 }
 
-function exampleIds() {
-  return (state.payload?.examples || []).map((example) => example.id);
+function exampleGroupId(group) {
+  return group.id || group.label;
 }
 
-function hasCompleteExamplePreviewCache(datasetIds = state.skillDatasetIds) {
-  const keySuffix = `@@${datasetSelectionKey(datasetIds)}`;
-  return exampleIds().every((exampleId) => state.examplePreviewCache[`${exampleId}${keySuffix}`]);
-}
-
-function storeExamplePreviews(previews, datasetIds = state.skillDatasetIds) {
-  const keySuffix = `@@${datasetSelectionKey(datasetIds)}`;
-  previews.forEach((preview) => {
-    state.examplePreviewCache[`${preview.id}${keySuffix}`] = preview;
-  });
+function groupSelectedOption(group) {
+  return group.options.find((option) => option.id === state.exampleId) || group.options[0] || null;
 }
 
 function cancelExampleLookup() {
@@ -681,7 +669,7 @@ function buildCustomPlaceholderContext() {
     topic: "Custom Input",
     difficulty: state.customLookupPending ? "Searching" : "Awaiting Retrieval",
     skillText: state.customLookupPending
-      ? "(Searching the DeepMath-103K skill archive...)"
+      ? "(Searching the selected skill datasets...)"
       : "(No skill card retrieved yet.)",
   };
 }
@@ -774,7 +762,7 @@ async function prepareExamplePreview(options = {}) {
     return null;
   }
 
-  if (!force && hasCompleteExamplePreviewCache()) {
+  if (!force && currentExamplePreview()) {
     renderSelection();
     if (clearResults) {
       clearLiveResults();
@@ -793,7 +781,7 @@ async function prepareExamplePreview(options = {}) {
   renderSelection();
 
   try {
-    const response = await fetch("/api/preload_examples", {
+    const response = await fetch("/api/retrieve_skill", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -801,17 +789,26 @@ async function prepareExamplePreview(options = {}) {
       cache: "no-store",
       signal: controller.signal,
       body: JSON.stringify({
+        id: example.id,
+        questionId: example.questionId || "",
+        sourceMode: "example",
+        title: example.title,
+        subtitle: example.subtitle,
+        topic: example.topic,
+        difficulty: example.difficulty,
+        question: example.question,
+        referenceAnswer: example.answer,
         skillDatasetIds: state.skillDatasetIds,
       }),
     });
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "Failed to preload retrieved skill cards.");
+      throw new Error(payload.error || "Failed to retrieve the skill card for this example.");
     }
     if (requestId !== state.exampleLookupRequestId) {
       return null;
     }
-    storeExamplePreviews(payload.previews || [], payload.datasetIds || state.skillDatasetIds);
+    state.examplePreviewCache[examplePreviewCacheKey(example.id, state.skillDatasetIds)] = payload.preview;
     renderSelection();
     if (clearResults) {
       clearLiveResults();
@@ -927,13 +924,34 @@ async function prepareCustomProblem(options = {}) {
 function renderExamples() {
   nodes.exampleList.innerHTML = "";
   (state.payload.exampleGroups || []).forEach((group) => {
+    const groupId = exampleGroupId(group);
     const card = document.createElement("article");
-    const active = group.optionIds.includes(state.exampleId);
-    card.className = active ? "example-group-card active" : "example-group-card";
+    const active = (group.optionIds || group.options.map((option) => option.id)).includes(state.exampleId);
+    const open = state.openExampleGroupId === groupId;
+    card.className = "example-group-card";
+    if (active) {
+      card.classList.add("active");
+    }
+    if (open) {
+      card.classList.add("open");
+    }
+
+    const header = document.createElement("div");
+    header.className = "example-group-header";
+
+    const copy = document.createElement("div");
+    copy.className = "example-group-copy";
+
+    const top = document.createElement("div");
+    top.className = "example-group-topline";
 
     const kicker = document.createElement("span");
     kicker.className = "example-group-kicker";
     kicker.textContent = group.kind === "benchmark" ? "Benchmark" : "Curated";
+
+    const count = document.createElement("span");
+    count.className = "example-group-count";
+    count.textContent = `${group.options.length} problems`;
 
     const title = document.createElement("strong");
     title.className = "example-group-title";
@@ -943,24 +961,78 @@ function renderExamples() {
     subtitle.className = "example-group-subtitle";
     subtitle.textContent = group.subtitle || "";
 
-    const select = document.createElement("select");
-    select.className = "example-group-select";
-    group.options.forEach((option) => {
-      const element = document.createElement("option");
-      element.value = option.id;
-      element.textContent = option.label;
-      select.appendChild(element);
-    });
-    select.value = active ? state.exampleId : group.options[0]?.id;
-    select.addEventListener("change", async (event) => {
-      state.exampleId = event.target.value;
-      nodes.customStatus.textContent = "Switch back to Custom Problem to search the selected skill datasets.";
-      setSourceMode("example");
-      clearLiveResults();
-      renderSelection();
+    top.append(kicker, count);
+    copy.append(top, title);
+    if (group.subtitle) {
+      copy.append(subtitle);
+    }
+    header.append(copy);
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "example-group-trigger";
+    trigger.setAttribute("aria-expanded", open ? "true" : "false");
+    trigger.addEventListener("click", () => {
+      state.openExampleGroupId = open ? null : groupId;
+      renderExamples();
     });
 
-    card.append(kicker, title, subtitle, select);
+    const current = groupSelectedOption(group);
+    const triggerCopy = document.createElement("span");
+    triggerCopy.className = "example-group-trigger-copy";
+
+    const triggerLabel = document.createElement("strong");
+    triggerLabel.textContent = current?.label || "Select a problem";
+
+    const triggerMeta = document.createElement("span");
+    triggerMeta.textContent = active
+      ? state.exampleLookupPending
+        ? "Searching skill card..."
+        : "Current selection"
+      : "Open the stack";
+
+    const chevron = document.createElement("span");
+    chevron.className = "example-group-chevron";
+    chevron.textContent = open ? "−" : "+";
+
+    triggerCopy.append(triggerLabel, triggerMeta);
+    trigger.append(triggerCopy, chevron);
+    card.append(header, trigger);
+
+    if (open) {
+      const stack = document.createElement("div");
+      stack.className = "example-option-stack";
+
+      group.options.forEach((option, index) => {
+        const optionButton = document.createElement("button");
+        optionButton.type = "button";
+        optionButton.className = option.id === state.exampleId ? "example-option-card active" : "example-option-card";
+        optionButton.addEventListener("click", () => {
+          state.exampleId = option.id;
+          state.openExampleGroupId = null;
+          nodes.customStatus.textContent = "Switch back to Custom Problem to search the selected skill datasets.";
+          setSourceMode("example");
+          clearLiveResults();
+          prepareExamplePreview({ clearResults: false }).catch((error) => {
+            nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
+          });
+        });
+
+        const optionIndex = document.createElement("span");
+        optionIndex.className = "example-option-index";
+        optionIndex.textContent = String(index + 1).padStart(2, "0");
+
+        const optionText = document.createElement("span");
+        optionText.className = "example-option-text";
+        optionText.textContent = option.label;
+
+        optionButton.append(optionIndex, optionText);
+        stack.appendChild(optionButton);
+      });
+
+      card.appendChild(stack);
+    }
+
     nodes.exampleList.appendChild(card);
   });
 }
@@ -1617,6 +1689,7 @@ async function boot() {
   state.payload = await response.json();
   state.exampleId =
     state.payload.exampleGroups?.[0]?.optionIds?.[0] || state.payload.examples?.[0]?.id || null;
+  state.openExampleGroupId = null;
   initializeFamilySelections();
   initializeVerifierSelection();
   initializeSkillDatasetSelection();

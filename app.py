@@ -1929,32 +1929,6 @@ class DemoHandler(SimpleHTTPRequestHandler):
             retrieval,
         )
 
-    def _build_example_preview(
-        self,
-        example: Dict[str, Any],
-        dataset_ids: list[str],
-    ) -> Dict[str, Any]:
-        retrieval = retrieve_skill_entry(
-            example["question"],
-            example["answer"],
-            self.server.skill_corpora,
-            dataset_ids,
-        )
-        return build_preview_example(
-            {
-                "id": example["id"],
-                "questionId": example.get("questionId") or "",
-                "title": example.get("title") or "",
-                "subtitle": example.get("subtitle") or "",
-                "topic": example.get("topic") or "",
-                "difficulty": example.get("difficulty") or "",
-                "question": example["question"],
-                "answer": example["answer"],
-                "sourceMode": "example",
-            },
-            retrieval,
-        )
-
     def _resolve_request(self, payload: Dict[str, Any]) -> tuple[Dict[str, Any], ModelConfig]:
         model_id = payload.get("modelId", "")
 
@@ -2111,21 +2085,6 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 preview = self._build_retrieved_preview(payload)
                 serialized = serialize_preview(preview)
                 self._send_json({"ok": True, "preview": serialized, "custom": serialized})
-                return
-
-            if parsed.path == "/api/preload_examples":
-                dataset_ids = resolve_skill_dataset_ids(payload.get("skillDatasetIds"), self.server.skill_corpora)
-                previews = [
-                    serialize_preview(self._build_example_preview(example, dataset_ids))
-                    for example in self.server.examples_payload["examples"]
-                ]
-                self._send_json(
-                    {
-                        "ok": True,
-                        "datasetIds": dataset_ids,
-                        "previews": previews,
-                    }
-                )
                 return
 
             example, config = self._resolve_request(payload)
