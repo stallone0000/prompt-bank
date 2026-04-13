@@ -727,7 +727,7 @@ def load_examples_payload() -> Dict[str, Any]:
     return payload
 
 
-def load_precomputed_example_previews(example_ids: set[str]) -> Dict[str, Any]:
+def load_precomputed_example_previews(examples_by_id: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     if not EXAMPLE_PREVIEW_MAP_PATH.exists():
         return {}
 
@@ -738,8 +738,25 @@ def load_precomputed_example_previews(example_ids: set[str]) -> Dict[str, Any]:
     filtered: Dict[str, Any] = {}
     for cache_key, preview in previews.items():
         example_id = cache_key.split("@@", 1)[0]
-        if example_id in example_ids:
-            filtered[cache_key] = preview
+        example = examples_by_id.get(example_id)
+        if example is None:
+            continue
+        canonicalized = dict(preview)
+        canonicalized.update(
+            {
+                "id": example["id"],
+                "questionId": example.get("questionId") or "",
+                "title": example.get("title") or canonicalized.get("title") or "",
+                "subtitle": example.get("subtitle") or canonicalized.get("subtitle") or "",
+                "highlight": canonicalized.get("highlight") or example.get("highlight") or "",
+                "question": example.get("question") or canonicalized.get("question") or "",
+                "answer": example.get("answer") or canonicalized.get("answer") or "",
+                "topic": example.get("topic") or canonicalized.get("topic") or "",
+                "difficulty": example.get("difficulty") or canonicalized.get("difficulty") or "",
+                "sourceMode": "example",
+            }
+        )
+        filtered[cache_key] = canonicalized
     return filtered
 
 
@@ -2138,7 +2155,7 @@ class DemoServer(ThreadingHTTPServer):
         self.examples_payload = payload
         self.examples_by_id = {example["id"]: example for example in payload["examples"]}
         self.examples_payload["precomputedExamplePreviews"] = load_precomputed_example_previews(
-            set(self.examples_by_id)
+            self.examples_by_id
         )
         self.skill_corpora = build_skill_corpora(payload)
         self.examples_payload["skillDatasets"] = {
