@@ -83,6 +83,7 @@ a {
   width: 34px;
   height: 34px;
   display: block;
+  object-fit: contain;
 }
 
 .topbar h1,
@@ -844,8 +845,9 @@ a {
   cursor: not-allowed;
 }
 
-.context-grid {
-  display: block;
+.context-stack {
+  display: grid;
+  gap: 2px;
 }
 
 .question-summary,
@@ -921,6 +923,7 @@ a {
 
 .collapse-panel {
   overflow: hidden;
+  margin: 0;
 }
 
 .collapse-panel summary {
@@ -948,6 +951,33 @@ a {
 
 .collapse-panel[open] summary::after {
   content: "−";
+}
+
+.skill-panel.collapse-panel {
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.skill-panel.collapse-panel summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+}
+
+.skill-panel.collapse-panel summary::after {
+  margin-left: auto;
+  float: none;
+}
+
+.skill-panel.collapse-panel[open] {
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.skill-panel.collapse-panel[open] summary {
+  border-bottom: 1px solid var(--line);
 }
 
 .skill-card {

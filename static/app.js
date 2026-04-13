@@ -756,18 +756,20 @@ function applyCustomSelection(custom, options = {}) {
 }
 
 async function prepareExamplePreview(options = {}) {
-  const { clearResults = true, force = false } = options;
+  const { clearResults = true } = options;
   const example = selectedExample();
   if (!example) {
     return null;
   }
 
-  if (!force && currentExamplePreview()) {
+  const cachedPreview = currentExamplePreview();
+  if (cachedPreview) {
+    state.exampleLookupPending = false;
     renderSelection();
     if (clearResults) {
       clearLiveResults();
     }
-    return currentExamplePreview();
+    return cachedPreview;
   }
 
   const requestId = state.exampleLookupRequestId + 1;
@@ -986,9 +988,7 @@ function renderExamples() {
 
     const triggerMeta = document.createElement("span");
     triggerMeta.textContent = active
-      ? state.exampleLookupPending
-        ? "Searching skill card..."
-        : "Current selection"
+      ? "Current selection"
       : "Open the stack";
 
     const chevron = document.createElement("span");
@@ -1690,6 +1690,9 @@ async function boot() {
   state.exampleId =
     state.payload.exampleGroups?.[0]?.optionIds?.[0] || state.payload.examples?.[0]?.id || null;
   state.openExampleGroupId = null;
+  state.examplePreviewCache = {
+    ...(state.payload.precomputedExamplePreviews || {}),
+  };
   initializeFamilySelections();
   initializeVerifierSelection();
   initializeSkillDatasetSelection();

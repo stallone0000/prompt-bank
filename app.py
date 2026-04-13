@@ -27,6 +27,7 @@ APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 DATA_PATH = APP_DIR / "data" / "demo_examples.json"
 BENCHMARK_GROUPS_PATH = APP_DIR / "data" / "benchmark_example_groups.json"
+EXAMPLE_PREVIEW_MAP_PATH = APP_DIR / "data" / "example_preview_map.json"
 DEEPMATH_SKILL_CORPUS_PATH = APP_DIR / "data" / "deepmath_103k_oss_skill_corpus.jsonl.gz"
 AOPS_SKILL_CORPUS_PATH = APP_DIR / "data" / "aops_skill_corpus.jsonl.gz"
 LEGACY_SKILL_CORPUS_PATH = APP_DIR / "data" / "trs_skill_corpus.jsonl"
@@ -724,6 +725,22 @@ def load_examples_payload() -> Dict[str, Any]:
         "promptStyle": "Original DeepMath answer-checker prompt",
     }
     return payload
+
+
+def load_precomputed_example_previews(example_ids: set[str]) -> Dict[str, Any]:
+    if not EXAMPLE_PREVIEW_MAP_PATH.exists():
+        return {}
+
+    with EXAMPLE_PREVIEW_MAP_PATH.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    previews = payload.get("previews") or {}
+    filtered: Dict[str, Any] = {}
+    for cache_key, preview in previews.items():
+        example_id = cache_key.split("@@", 1)[0]
+        if example_id in example_ids:
+            filtered[cache_key] = preview
+    return filtered
 
 
 def tokenize_retrieval_text(text: str) -> list[str]:
@@ -2120,6 +2137,9 @@ class DemoServer(ThreadingHTTPServer):
         payload = load_examples_payload()
         self.examples_payload = payload
         self.examples_by_id = {example["id"]: example for example in payload["examples"]}
+        self.examples_payload["precomputedExamplePreviews"] = load_precomputed_example_previews(
+            set(self.examples_by_id)
+        )
         self.skill_corpora = build_skill_corpora(payload)
         self.examples_payload["skillDatasets"] = {
             "defaultSelectedIds": list(
