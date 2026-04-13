@@ -86,6 +86,12 @@ RETRYABLE_HTTP_DETAIL_SNIPPETS = (
     "gateway",
     "forbidden",
 )
+CLAUDE_THINKING_EXTRA_BODY = {
+    "thinking": {
+        "type": "enabled",
+        "budget_tokens": 16000,
+    }
+}
 TRS_SOURCE_LABELS = {
     "doubao_trs": "Doubao TRS Archive",
     "oss_trs": "GPT-OSS TRS Archive",
@@ -367,6 +373,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=36.5,
         output_price_yuan_per_million=273.75,
         supports_reasoning_trace=False,
+        extra_body=CLAUDE_THINKING_EXTRA_BODY,
     ),
     "claudesonnet46": ModelConfig(
         model_id="claudesonnet46",
@@ -379,6 +386,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=18.576,
         output_price_yuan_per_million=92.88,
         supports_reasoning_trace=False,
+        extra_body=CLAUDE_THINKING_EXTRA_BODY,
     ),
     "claudehaiku45": ModelConfig(
         model_id="claudehaiku45",
@@ -391,6 +399,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=7.2,
         output_price_yuan_per_million=36.0,
         supports_reasoning_trace=False,
+        extra_body=CLAUDE_THINKING_EXTRA_BODY,
     ),
     "grok4": ModelConfig(
         model_id="grok4",

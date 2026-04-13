@@ -127,7 +127,7 @@ const FAMILY_META = {
   kimi: {
     label: "Kimi",
     short: "KM",
-    icon: null,
+    icon: "/icon/kimi.svg",
   },
 };
 
