@@ -60,22 +60,24 @@
               <div class="picker-head">
                 <div class="picker-copy">
                   <span class="field-label">Model Families</span>
-                  <p>Each family keeps its own selected model. Changing a dropdown activates that family.</p>
+                  <p>Grouped by family. Pick one and run.</p>
                 </div>
-                <span id="modelCount" class="picker-note">-</span>
+                <div class="picker-tools">
+                  <span id="modelCount" class="picker-note">-</span>
+                  <div class="control-actions">
+                    <div class="verifier-card current-model-card">
+                      <span>Current Model</span>
+                      <strong id="currentModel">-</strong>
+                    </div>
+                    <div class="verifier-card">
+                      <span>Verifier Model</span>
+                      <strong id="verifierModel">-</strong>
+                    </div>
+                    <button id="runButton" class="run-button">Run Live Comparison</button>
+                  </div>
+                </div>
               </div>
               <div id="modelGroupGrid" class="model-group-grid"></div>
-            </div>
-            <div class="control-actions">
-              <div class="verifier-card">
-                <span>Current Model</span>
-                <strong id="currentModel">-</strong>
-              </div>
-              <div class="verifier-card">
-                <span>Verifier Model</span>
-                <strong id="verifierModel">-</strong>
-              </div>
-              <button id="runButton" class="run-button">Run Live Comparison</button>
             </div>
           </div>
 

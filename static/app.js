@@ -262,10 +262,6 @@ function familyMeta(familyId) {
   };
 }
 
-function familyCountLabel(entries) {
-  return `${entries.length} model${entries.length > 1 ? "s" : ""}`;
-}
-
 function initializeFamilySelections() {
   const models = state.payload.models;
   const activeModel = models[state.modelId] ? state.modelId : Object.keys(models)[0];
@@ -324,7 +320,7 @@ function renderModelSelector() {
     : families.keys().next().value;
   state.selectedFamilyId = activeFamily;
   nodes.modelGroupGrid.innerHTML = "";
-  nodes.modelCount.textContent = `${Object.keys(state.payload.models).length} available`;
+  nodes.modelCount.textContent = `${Object.keys(state.payload.models).length} models`;
 
   families.forEach((entries, family) => {
     const meta = familyMeta(family);
@@ -345,15 +341,9 @@ function renderModelSelector() {
     copy.className = "model-group-copy";
     const title = document.createElement("strong");
     title.textContent = meta.label;
-    const subtitle = document.createElement("span");
-    subtitle.textContent = "Series";
-    copy.append(title, subtitle);
+    copy.append(title);
 
-    const count = document.createElement("span");
-    count.className = "model-group-count";
-    count.textContent = familyCountLabel(entries);
-
-    head.append(brand, copy, count);
+    head.append(brand, copy);
 
     const label = document.createElement("label");
     label.className = "sr-only";
@@ -386,7 +376,7 @@ function renderModelSelector() {
     };
 
     head.addEventListener("click", () => {
-      activateFamily(selectedModelId);
+      activateFamily(select.value);
     });
     select.addEventListener("focus", () => {
       activateFamily(select.value);
@@ -398,15 +388,7 @@ function renderModelSelector() {
       activateFamily(event.target.value);
     });
 
-    const metaLine = document.createElement("div");
-    metaLine.className = "model-group-meta";
-    const metaLabel = document.createElement("span");
-    metaLabel.textContent = "Active model";
-    const metaValue = document.createElement("strong");
-    metaValue.textContent = state.payload.models[selectedModelId].label;
-    metaLine.append(metaLabel, metaValue);
-
-    card.append(head, label, select, metaLine);
+    card.append(head, label, select);
     nodes.modelGroupGrid.appendChild(card);
   });
 
