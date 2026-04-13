@@ -372,6 +372,12 @@ a {
   gap: 8px;
 }
 
+.picker-copy {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
 .picker-head {
   display: flex;
   align-items: flex-start;
@@ -390,7 +396,9 @@ a {
 }
 
 .picker-note {
-  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -1011,11 +1019,6 @@ a {
   .picker-tools {
     flex: none;
     gap: 6px;
-  }
-
-  .picker-note {
-    width: auto;
-    align-self: flex-start;
   }
 
   .verifier-card,
