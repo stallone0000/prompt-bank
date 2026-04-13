@@ -524,7 +524,7 @@ function buildCustomPlaceholderContext() {
     id: "custom-problem-placeholder",
     title: "Custom Problem",
     subtitle: state.customLookupPending
-      ? "Searching the DeepMath-103K TRS archive..."
+      ? "Searching the DeepMath skill archive..."
       : "Fill in the question and answer, then apply the problem to retrieve a matching skill card.",
     question: "Your custom question will appear here after you apply it.",
     answer: "—",
@@ -542,7 +542,7 @@ function buildPendingCustomContext() {
   return {
     id: "custom-problem-pending",
     title: "Custom Problem",
-    subtitle: "Searching the DeepMath-103K TRS archive...",
+    subtitle: "Searching the DeepMath skill archive...",
     question: question || "Your custom question will appear here after you apply it.",
     answer: answer || "—",
     topic: "Custom Input",
@@ -566,6 +566,9 @@ function currentProblemContext() {
 
 function describeCustomMatch(custom) {
   const retrieval = custom?.retrieval || {};
+  if (retrieval.noExperience) {
+    return `No matching skill card found in ${retrieval.sourceLabel || "the DeepMath skill archive"}. Using no experience.`;
+  }
   const parts = [];
   if (retrieval.sourceLabel) {
     parts.push(`Retrieved from ${retrieval.sourceLabel}`);
@@ -730,7 +733,9 @@ function renderSelection() {
     : problem.topic.split(" -> ").slice(-2).join(" • ");
   nodes.difficultyBadge.textContent = isCustom
     ? isResolvedCustom
-      ? "Retrieved Skill"
+      ? problem.retrieval?.noExperience
+        ? "No Experience"
+        : "Retrieved Skill"
       : state.customLookupPending
         ? "Searching"
         : "Awaiting Retrieval"

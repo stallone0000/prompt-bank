@@ -66,26 +66,22 @@ a {
 .topbar-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
 .topbar-logo-shell {
-  width: 66px;
-  height: 66px;
-  border-radius: 999px;
+  width: auto;
+  height: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  border: 1px solid #e3ddd4;
-  background: #ffffff;
-  box-shadow: 0 4px 14px rgba(20, 18, 15, 0.06);
 }
 
 .topbar-logo {
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   display: block;
 }
 
@@ -739,14 +735,20 @@ a {
 }
 
 .section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
 }
 
 .section-heading p,
 #runStatus {
-  margin: 8px 0 0;
-  font-size: 0.93rem;
-  line-height: 1.6;
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  text-align: right;
 }
 
 .live-summary {

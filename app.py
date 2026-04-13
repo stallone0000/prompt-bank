@@ -125,6 +125,7 @@ RETRYABLE_HTTP_DETAIL_SNIPPETS = (
     "gateway",
     "forbidden",
 )
+NO_EXPERIENCE_SKILL_TEXT = "No experience."
 CLAUDE_THINKING_EXTRA_BODY = {
     "thinking": {
         "type": "enabled",
@@ -812,14 +813,26 @@ def retrieve_skill_entry(question: str, reference_answer: str, corpus: Dict[str,
             best_overlap = overlap
 
     if best_entry is None:
-        best_entry = max(entries, key=lambda item: item["skill_score"])
-        best_score = best_entry["skill_score"] * 0.004
-        best_overlap = set()
+        return {
+            "question_id": "",
+            "question": "",
+            "answer": "",
+            "topic": "",
+            "difficulty": None,
+            "skill_text": NO_EXPERIENCE_SKILL_TEXT,
+            "skill_score": 0.0,
+            "source_key": "no_experience",
+            "source_label": corpus.get("label") or "DeepMath skill archive",
+            "retrieval_score": 0.0,
+            "matched_tokens": [],
+            "no_experience": True,
+        }
 
     return {
         **best_entry,
         "retrieval_score": round(best_score, 4),
         "matched_tokens": sorted(best_overlap),
+        "no_experience": False,
     }
 
 
@@ -846,10 +859,16 @@ def build_custom_example(question: str, reference_answer: str, retrieval: Dict[s
         "questionId": "",
         "title": "Custom Problem",
         "subtitle": (
-            f"Matched to {retrieval['source_label']}"
+            f"No matching skill card found in {retrieval['source_label']}."
+            if retrieval.get("no_experience")
+            else f"Matched to {retrieval['source_label']}"
             + (f" · {retrieval['topic']}" if retrieval.get("topic") else "")
         ),
-        "highlight": "Skill card retrieved from the deployable DeepMath-103K TRS archive using lexical overlap.",
+        "highlight": (
+            "No lexical match found. TRS will run without retrieved experience."
+            if retrieval.get("no_experience")
+            else "Skill card retrieved from the DeepMath skill archive using lexical overlap."
+        ),
         "question": question.strip(),
         "answer": reference_answer.strip(),
         "topic": "Custom Input",
@@ -865,6 +884,7 @@ def build_custom_example(question: str, reference_answer: str, retrieval: Dict[s
             "matchedDifficulty": retrieval.get("difficulty"),
             "matchedTokens": retrieval.get("matched_tokens") or [],
             "score": retrieval["retrieval_score"],
+            "noExperience": bool(retrieval.get("no_experience")),
         },
         "customTitle": summarize_custom_question(question),
     }
@@ -894,7 +914,10 @@ def compute_cost_yuan(prompt_tokens: int, completion_tokens: int, config: ModelC
 
 
 def build_prompt(template: str, question: str, skill_text: str) -> str:
-    return template.replace("{SOLVING_HINTS}", skill_text).replace("{PROBLEM}", question)
+    effective_skill_text = ""
+    if skill_text.strip() and skill_text.strip() != NO_EXPERIENCE_SKILL_TEXT:
+        effective_skill_text = skill_text
+    return template.replace("{SOLVING_HINTS}", effective_skill_text).replace("{PROBLEM}", question)
 
 
 def build_direct_prompt(question: str) -> str:
