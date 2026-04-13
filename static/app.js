@@ -1,6 +1,7 @@
 const state = {
   payload: null,
   modelId: "doubao",
+  verifierModelId: null,
   selectedFamilyId: null,
   familySelections: {},
   exampleId: null,
@@ -161,6 +162,10 @@ function formatMaybeReductionPercent(value) {
 
 function formatMaybeYuan(value) {
   return Number.isFinite(value) ? formatYuan(value) : "N/A";
+}
+
+function verifierOptions() {
+  return state.payload?.verifier?.options || [];
 }
 
 function sleep(ms) {
@@ -468,6 +473,40 @@ function renderModelSelector() {
   state.modelId = state.familySelections[activeFamily];
 }
 
+function initializeVerifierSelection() {
+  const options = verifierOptions();
+  if (!options.length) {
+    state.verifierModelId = null;
+    return;
+  }
+  const configured = state.payload?.verifier?.defaultId;
+  state.verifierModelId = options.some((option) => option.id === configured)
+    ? configured
+    : options[0].id;
+}
+
+function renderVerifierSelector() {
+  const options = verifierOptions();
+  nodes.verifierModel.innerHTML = "";
+  options.forEach((option) => {
+    const element = document.createElement("option");
+    element.value = option.id;
+    element.textContent = option.label;
+    nodes.verifierModel.appendChild(element);
+  });
+
+  if (!options.length) {
+    nodes.verifierModel.disabled = true;
+    return;
+  }
+
+  if (!options.some((option) => option.id === state.verifierModelId)) {
+    state.verifierModelId = options[0].id;
+  }
+  nodes.verifierModel.disabled = false;
+  nodes.verifierModel.value = state.verifierModelId;
+}
+
 function selectedExample() {
   return state.payload.examples.find((example) => example.id === state.exampleId);
 }
@@ -701,7 +740,9 @@ function renderSelection() {
   nodes.questionText.textContent = problem.question;
   nodes.referenceAnswer.textContent = problem.answer;
   nodes.currentModel.textContent = state.payload.models[state.modelId]?.label || "-";
-  nodes.verifierModel.textContent = state.payload.verifier?.model || "openai/gpt-5-mini";
+  if (state.verifierModelId) {
+    nodes.verifierModel.value = state.verifierModelId;
+  }
   nodes.skillCard.textContent = isCustom
     ? problem.skillText
     : problem.archived[state.modelId].trs.skill_text;
@@ -851,7 +892,7 @@ function renderLiveSummary(summary) {
     },
     {
       label: "Cost Saved",
-      trend: summarizeTrend(summary.cost_saved_yuan, formatYuan),
+      trend: summarizeTrend(summary.cost_reduction_pct, formatReductionPercent),
     },
   ];
   cards.forEach((card) => {
@@ -1125,6 +1166,7 @@ function buildRunRequestBody(runId) {
   if (state.sourceMode === "custom" && state.customContext) {
     return {
       modelId: state.modelId,
+      verifierModelId: state.verifierModelId,
       runId,
       question: state.customContext.question,
       referenceAnswer: state.customContext.answer,
@@ -1140,6 +1182,7 @@ function buildRunRequestBody(runId) {
   return {
     exampleId: state.exampleId,
     modelId: state.modelId,
+    verifierModelId: state.verifierModelId,
     runId,
   };
 }
@@ -1294,6 +1337,7 @@ async function boot() {
   state.payload = await response.json();
   state.exampleId = state.payload.examples[0].id;
   initializeFamilySelections();
+  initializeVerifierSelection();
   nodes.customQuestion.value = state.customDraft.question;
   nodes.customAnswer.value = state.customDraft.answer;
   const corpusMeta = state.payload.skillCorpus || {};
@@ -1301,6 +1345,7 @@ async function boot() {
     ? `Live retrieval over ${formatNumber(corpusMeta.docCount)} deployable skills from ${corpusMeta.label || "DeepMath-103K"}.`
     : "Live retrieval over the deployable DeepMath-103K skill archive.";
   renderModelSelector();
+  renderVerifierSelector();
   renderSourcePanels();
   renderExamples();
   renderSelection();
@@ -1326,6 +1371,10 @@ async function boot() {
   });
   nodes.customQuestion.addEventListener("input", markCustomDirty);
   nodes.customAnswer.addEventListener("input", markCustomDirty);
+  nodes.verifierModel.addEventListener("change", (event) => {
+    state.verifierModelId = event.target.value;
+    clearLiveResults();
+  });
   nodes.stopButton.disabled = true;
 }
 

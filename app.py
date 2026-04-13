@@ -464,6 +464,30 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
 }
 
+VERIFIER_MODEL_OPTIONS: Dict[str, Dict[str, str]] = {
+    "gpt5mini": {
+        "id": "gpt5mini",
+        "label": "GPT-5 Mini",
+        "api_model": "openai/gpt-5-mini",
+    },
+    "oss": {
+        "id": "oss",
+        "label": "GPT-120B",
+        "api_model": "qiniu/gpt-oss-120b",
+    },
+    "oss20": {
+        "id": "oss20",
+        "label": "GPT-20B",
+        "api_model": "qiniu/gpt-oss-20b",
+    },
+    "grok4fast": {
+        "id": "grok4fast",
+        "label": "Grok-4 Fast",
+        "api_model": "qiniu/grok-4-fast",
+    },
+}
+DEFAULT_VERIFIER_OPTION_ID = "gpt5mini"
+
 
 ARCHIVED_FALLBACK_PRIORITY = [
     "doubao",
@@ -533,8 +557,13 @@ def load_examples_payload() -> Dict[str, Any]:
     }
     payload["selectionRule"] = "Curated from rebuttal runs whose original direct CoT was very long (>6000) and shrank substantially under TRS."
     payload["tokenUsageFields"] = TOKEN_USAGE_FIELDS
+    verifier_option_id = default_verifier_option_id()
+    verifier_option = VERIFIER_MODEL_OPTIONS[verifier_option_id]
     payload["verifier"] = {
-        "model": get_verify_model(),
+        "defaultId": verifier_option_id,
+        "label": verifier_option["label"],
+        "model": verifier_option["api_model"],
+        "options": [verifier_option_payload(option) for option in VERIFIER_MODEL_OPTIONS.values()],
         "promptStyle": "Original DeepMath answer-checker prompt",
     }
     return payload
@@ -801,6 +830,32 @@ def get_verify_model() -> str:
     return os.environ.get("TRS_DEMO_VERIFY_MODEL", "openai/gpt-5-mini").strip() or "openai/gpt-5-mini"
 
 
+def verifier_option_payload(option: Dict[str, str]) -> Dict[str, str]:
+    return {
+        "id": option["id"],
+        "label": option["label"],
+        "apiModel": option["api_model"],
+    }
+
+
+def default_verifier_option_id() -> str:
+    configured_model = get_verify_model()
+    for option_id, option in VERIFIER_MODEL_OPTIONS.items():
+        if option["api_model"] == configured_model:
+            return option_id
+    return DEFAULT_VERIFIER_OPTION_ID
+
+
+def resolve_verifier_model(verifier_model_id: str | None) -> str:
+    option_id = (verifier_model_id or "").strip()
+    if option_id:
+        option = VERIFIER_MODEL_OPTIONS.get(option_id)
+        if not option:
+            raise ValueError(f"Unsupported verifierModelId: {option_id}")
+        return option["api_model"]
+    return get_verify_model()
+
+
 def build_opener() -> request.OpenerDirector:
     proxy_url = os.environ.get("TRS_DEMO_PROXY_URL", "").strip()
     if not proxy_url:
@@ -956,8 +1011,13 @@ def verifier_max_tokens_param(model_name: str) -> str:
     return "max_tokens"
 
 
-def verify_answer(question_text: str, reference_answer: str, candidate_answer: str) -> Dict[str, Any]:
-    verifier_model = get_verify_model()
+def verify_answer(
+    question_text: str,
+    reference_answer: str,
+    candidate_answer: str,
+    verifier_model: str | None = None,
+) -> Dict[str, Any]:
+    verifier_model = (verifier_model or "").strip() or get_verify_model()
     cleaned_candidate = (candidate_answer or "").strip()
     max_retries = get_verify_max_retries()
     if not cleaned_candidate:
@@ -1107,6 +1167,7 @@ def build_result(
     usage: Dict[str, Any],
     reference_answer: str,
     finish_reason: str | None,
+    verifier_model: str,
 ) -> Dict[str, Any]:
     prompt_tokens = parse_usage_int(usage.get("prompt_tokens"))
     completion_tokens = parse_usage_int(usage.get("completion_tokens"))
@@ -1120,7 +1181,7 @@ def build_result(
     if prompt_tokens is not None and completion_tokens is not None:
         cost_yuan = round(compute_cost_yuan(prompt_tokens, completion_tokens, config), 6)
 
-    correctness = verify_answer(question_text, reference_answer, answer_text)
+    correctness = verify_answer(question_text, reference_answer, answer_text, verifier_model=verifier_model)
     stop_info = summarize_stop_reason(finish_reason, "\n".join([reasoning_text or "", answer_text or ""]))
 
     return {
@@ -1209,6 +1270,9 @@ def compute_live_summary(direct: Dict[str, Any], trs: Dict[str, Any]) -> Dict[st
     cost_saved = None
     if direct["cost_yuan"] is not None and trs["cost_yuan"] is not None:
         cost_saved = round(direct["cost_yuan"] - trs["cost_yuan"], 6)
+    cost_reduction_pct = None
+    if cost_saved is not None and direct["cost_yuan"] and direct["cost_yuan"] > 0:
+        cost_reduction_pct = round(cost_saved / direct["cost_yuan"] * 100, 2)
 
     completion_reduction_pct = None
     if completion_saved is not None and direct["completion_tokens"] and direct["completion_tokens"] > 0:
@@ -1218,6 +1282,7 @@ def compute_live_summary(direct: Dict[str, Any], trs: Dict[str, Any]) -> Dict[st
         "completion_reduction_pct": completion_reduction_pct,
         "total_tokens_saved": total_saved,
         "cost_saved_yuan": cost_saved,
+        "cost_reduction_pct": cost_reduction_pct,
     }
 
 
@@ -1240,7 +1305,13 @@ def model_payload(config: ModelConfig) -> Dict[str, Any]:
     }
 
 
-def call_model(question_text: str, prompt_text: str, config: ModelConfig, reference_answer: str) -> Dict[str, Any]:
+def call_model(
+    question_text: str,
+    prompt_text: str,
+    config: ModelConfig,
+    reference_answer: str,
+    verifier_model: str,
+) -> Dict[str, Any]:
     opener = build_opener()
     timeout_seconds = get_timeout_seconds()
     max_retries = get_live_max_retries()
@@ -1272,6 +1343,7 @@ def call_model(question_text: str, prompt_text: str, config: ModelConfig, refere
         usage=usage,
         reference_answer=reference_answer,
         finish_reason=choice.get("finish_reason"),
+        verifier_model=verifier_model,
     )
 
 
@@ -1280,12 +1352,13 @@ def stream_model(
     prompt_text: str,
     config: ModelConfig,
     reference_answer: str,
+    verifier_model: str,
     on_delta: Callable[[str, str], None],
     on_retry: Callable[[int, int, str], None],
     on_fallback: Callable[[str], None],
 ) -> Dict[str, Any]:
     if config.prefer_standard_request:
-        return call_model(question_text, prompt_text, config, reference_answer)
+        return call_model(question_text, prompt_text, config, reference_answer, verifier_model)
 
     opener = build_opener()
     timeout_seconds = get_timeout_seconds()
@@ -1337,6 +1410,7 @@ def stream_model(
                 usage=usage,
                 reference_answer=reference_answer,
                 finish_reason=finish_reason,
+                verifier_model=verifier_model,
             )
         except Exception as exc:
             last_error = format_upstream_error(exc)
@@ -1347,7 +1421,7 @@ def stream_model(
 
     on_fallback(last_error)
     try:
-        return call_model(question_text, prompt_text, config, reference_answer)
+        return call_model(question_text, prompt_text, config, reference_answer, verifier_model)
     except Exception as exc:
         fallback_error = format_upstream_error(exc)
         raise RuntimeError(
@@ -1356,7 +1430,9 @@ def stream_model(
         ) from exc
 
 
-def serialize_live_comparison(example: Dict[str, Any], config: ModelConfig) -> Dict[str, Any]:
+def serialize_live_comparison(
+    example: Dict[str, Any], config: ModelConfig, verifier_model: str
+) -> Dict[str, Any]:
     question = example["question"]
     reference_answer = example["answer"]
     skill_text = example["archived"][config.model_id]["trs"]["skill_text"]
@@ -1364,8 +1440,8 @@ def serialize_live_comparison(example: Dict[str, Any], config: ModelConfig) -> D
     trs_prompt = build_prompt(config.prompt_template, question, skill_text)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        future_direct = pool.submit(call_model, question, direct_prompt, config, reference_answer)
-        future_trs = pool.submit(call_model, question, trs_prompt, config, reference_answer)
+        future_direct = pool.submit(call_model, question, direct_prompt, config, reference_answer, verifier_model)
+        future_trs = pool.submit(call_model, question, trs_prompt, config, reference_answer, verifier_model)
         direct = future_direct.result()
         trs = future_trs.result()
 
@@ -1474,7 +1550,13 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
         return example, MODEL_CONFIGS[model_id]
 
-    def _handle_stream_run(self, example: Dict[str, Any], config: ModelConfig, run_id: int | None) -> None:
+    def _handle_stream_run(
+        self,
+        example: Dict[str, Any],
+        config: ModelConfig,
+        verifier_model: str,
+        run_id: int | None,
+    ) -> None:
         question = example["question"]
         reference_answer = example["answer"]
         archived = example["archived"][config.model_id]
@@ -1522,6 +1604,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
                     prompt_text=prompts[lane],
                     config=config,
                     reference_answer=reference_answer,
+                    verifier_model=verifier_model,
                     on_delta=lambda kind, text: emit("lane_delta", {"lane": lane, "kind": kind, "text": text}),
                     on_retry=lambda attempt, max_attempts, error_message: emit(
                         "lane_retry",
@@ -1600,10 +1683,11 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 return
 
             example, config = self._resolve_request(payload)
+            verifier_model = resolve_verifier_model(payload.get("verifierModelId"))
             run_id = payload.get("runId")
 
             if parsed.path == "/api/run":
-                live = serialize_live_comparison(example, config)
+                live = serialize_live_comparison(example, config, verifier_model)
                 self._send_json(
                     {
                         "ok": True,
@@ -1615,7 +1699,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 return
 
             if parsed.path == "/api/run_stream":
-                self._handle_stream_run(example, config, run_id)
+                self._handle_stream_run(example, config, verifier_model, run_id)
                 return
 
             self._send_json({"error": f"Unknown endpoint: {parsed.path}"}, status=HTTPStatus.NOT_FOUND)
