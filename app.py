@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import gzip
 import json
 import math
 import os
@@ -25,7 +26,44 @@ from urllib.parse import urlparse
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 DATA_PATH = APP_DIR / "data" / "demo_examples.json"
-SKILL_CORPUS_PATH = APP_DIR / "data" / "trs_skill_corpus.jsonl"
+DEPLOYABLE_SKILL_CORPUS_PATH = APP_DIR / "data" / "deepmath_103k_oss_skill_corpus.jsonl.gz"
+LEGACY_SKILL_CORPUS_PATH = APP_DIR / "data" / "trs_skill_corpus.jsonl"
+LOCAL_SKILL_CORPUS_CANDIDATES = (
+    {
+        "path": DEPLOYABLE_SKILL_CORPUS_PATH,
+        "format": "deployable",
+        "label": "DeepMath-103K OSS Skill Archive",
+    },
+    {
+        "path": APP_DIR.parent / "DeepMath-103K" / "cot-bank" / "deepmath_train_oss_distillation_verify_with_heuristics.jsonl",
+        "format": "heuristic",
+        "source_key": "oss_103k",
+        "source_label": "DeepMath-103K OSS Skill Archive",
+    },
+    {
+        "path": APP_DIR.parent / "DeepMath-103K" / "cot-bank" / "deepmath_train_doubao_distillation_verify_with_heuristics.jsonl",
+        "format": "heuristic",
+        "source_key": "doubao_103k",
+        "source_label": "DeepMath-103K Doubao Skill Archive",
+    },
+    {
+        "path": APP_DIR.parent / "DeepMath-103K" / "cot-bank" / "deepmath_train_oss_distillation_verify_with_heuristics_rest.jsonl",
+        "format": "heuristic",
+        "source_key": "oss_93k",
+        "source_label": "DeepMath-93K OSS Skill Archive",
+    },
+    {
+        "path": APP_DIR.parent / "DeepMath-103K" / "cot-bank" / "deepmath_train_doubao_distillation_verify_with_heuristics_rest.jsonl",
+        "format": "heuristic",
+        "source_key": "doubao_93k",
+        "source_label": "DeepMath-93K Doubao Skill Archive",
+    },
+    {
+        "path": LEGACY_SKILL_CORPUS_PATH,
+        "format": "deployable",
+        "label": "DeepMath deployable skill archive",
+    },
+)
 
 PROMPT_DIRECT = """You are a helpful and harmless assistant.
 Let's think step by step:
@@ -590,16 +628,47 @@ def normalize_answer_text(text: str) -> str:
     return "".join(char for char in (text or "").lower() if char.isalnum())
 
 
-def iter_skill_corpus_records(payload: Dict[str, Any]) -> list[Dict[str, Any]]:
+def open_jsonl_handle(path: Path):
+    if path.suffix == ".gz":
+        return gzip.open(path, "rt", encoding="utf-8")
+    return path.open("r", encoding="utf-8")
+
+
+def iter_skill_corpus_records(payload: Dict[str, Any]) -> Dict[str, Any]:
     records: list[Dict[str, Any]] = []
 
-    if SKILL_CORPUS_PATH.exists():
-        with SKILL_CORPUS_PATH.open("r", encoding="utf-8") as handle:
+    for candidate in LOCAL_SKILL_CORPUS_CANDIDATES:
+        path = candidate["path"]
+        if not path.exists():
+            continue
+
+        records = []
+        source_label = candidate.get("label") or candidate.get("source_label") or "DeepMath skill archive"
+        with open_jsonl_handle(path) as handle:
             for line in handle:
                 if not line.strip():
                     continue
                 item = json.loads(line)
-                source_key = (item.get("source_key") or "").strip()
+                if candidate["format"] == "deployable":
+                    source_key = (item.get("source_key") or "").strip()
+                    item_label = (item.get("source_label") or source_label_for_key(source_key)).strip()
+                    if item_label:
+                        source_label = item_label
+                    records.append(
+                        {
+                            "question_id": item.get("question_id") or "",
+                            "question": (item.get("question") or "").strip(),
+                            "answer": (item.get("answer") or "").strip(),
+                            "topic": (item.get("topic") or "").strip(),
+                            "difficulty": item.get("difficulty"),
+                            "skill_text": (item.get("skill_text") or "").strip(),
+                            "skill_score": float(item.get("skill_score") or 0.0),
+                            "source_key": source_key,
+                            "source_label": item_label,
+                        }
+                    )
+                    continue
+
                 records.append(
                     {
                         "question_id": item.get("question_id") or "",
@@ -607,13 +676,14 @@ def iter_skill_corpus_records(payload: Dict[str, Any]) -> list[Dict[str, Any]]:
                         "answer": (item.get("answer") or "").strip(),
                         "topic": (item.get("topic") or "").strip(),
                         "difficulty": item.get("difficulty"),
-                        "skill_text": (item.get("skill_text") or "").strip(),
-                        "skill_score": float(item.get("skill_score") or 0.0),
-                        "source_key": source_key,
-                        "source_label": (item.get("source_label") or source_label_for_key(source_key)).strip(),
+                        "skill_text": (item.get("heuristic") or "").strip(),
+                        "skill_score": float(item.get("heuristic_score") or 0.0),
+                        "source_key": candidate["source_key"],
+                        "source_label": candidate["source_label"],
                     }
                 )
-        return records
+        if records:
+            return {"records": records, "label": source_label, "path": str(path)}
 
     for source_key, path_str in payload.get("sources", {}).items():
         if not source_key.endswith("_trs"):
@@ -641,15 +711,20 @@ def iter_skill_corpus_records(payload: Dict[str, Any]) -> list[Dict[str, Any]]:
                     }
                 )
 
-    return records
+    return {
+        "records": records,
+        "label": "DeepMath curated TRS archives",
+        "path": None,
+    }
 
 
 def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
     entries: list[Dict[str, Any]] = []
     doc_freq: Counter[str] = Counter()
     seen_pairs: set[tuple[str, str]] = set()
+    corpus_source = iter_skill_corpus_records(payload)
 
-    for item in iter_skill_corpus_records(payload):
+    for item in corpus_source["records"]:
         question = item["question"]
         skill_text = item["skill_text"]
         if not question or not skill_text:
@@ -686,6 +761,8 @@ def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
         "entries": entries,
         "idf": idf,
         "doc_count": total_docs,
+        "label": corpus_source["label"],
+        "path": corpus_source["path"],
     }
 
 
@@ -702,7 +779,7 @@ def retrieve_skill_entry(question: str, reference_answer: str, corpus: Dict[str,
 
     entries = corpus.get("entries", [])
     if not entries:
-        raise ValueError("No deployable TRS skill corpus is available for retrieval.")
+        raise ValueError("No DeepMath skill corpus is available for retrieval.")
 
     best_entry: Dict[str, Any] | None = None
     best_score = float("-inf")
@@ -1779,7 +1856,7 @@ class DemoServer(ThreadingHTTPServer):
         self.skill_corpus = build_skill_corpus(payload)
         self.examples_payload["skillCorpus"] = {
             "docCount": self.skill_corpus["doc_count"],
-            "label": "DeepMath-103K TRS archive",
+            "label": self.skill_corpus["label"],
         }
 
 

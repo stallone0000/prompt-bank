@@ -1353,8 +1353,8 @@ async function boot() {
   nodes.customAnswer.value = state.customDraft.answer;
   const corpusMeta = state.payload.skillCorpus || {};
   nodes.customCorpusMeta.textContent = corpusMeta.docCount
-    ? `Live retrieval over ${formatNumber(corpusMeta.docCount)} deployable skills from ${corpusMeta.label || "DeepMath-103K"}.`
-    : "Live retrieval over the deployable DeepMath-103K skill archive.";
+    ? `Live retrieval over ${formatNumber(corpusMeta.docCount)} skill cards from ${corpusMeta.label || "DeepMath-103K"}.`
+    : "Live retrieval over the DeepMath skill archive.";
   renderModelSelector();
   renderVerifierSelector();
   renderSourcePanels();
