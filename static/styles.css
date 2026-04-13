@@ -592,7 +592,8 @@ a {
 
 .control-bar {
   display: grid;
-  gap: 2px;
+  gap: 0;
+  padding: 10px 14px 9px;
 }
 
 .field-label {
@@ -623,7 +624,8 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin: 0 0 1px;
+  margin: 0;
+  min-height: 31px;
 }
 
 .picker-tools {
@@ -641,7 +643,7 @@ a {
   align-items: center;
   justify-content: center;
   width: fit-content;
-  height: 31px;
+  height: 29px;
   margin-top: 0;
   padding: 0 9px;
   border: 1px solid var(--line);
@@ -772,7 +774,7 @@ a {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel-soft);
@@ -847,7 +849,7 @@ a {
   border-radius: 999px;
   border: 1px solid var(--line-strong);
   cursor: pointer;
-  padding: 10px 15px;
+  padding: 8px 14px;
   font-weight: 600;
   transition: background 140ms ease, color 140ms ease, border-color 140ms ease, opacity 140ms ease;
 }
@@ -956,6 +958,14 @@ a {
   font-weight: 500;
   display: inline-flex;
   align-items: center;
+  line-height: 1;
+}
+
+.trace-summary-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   line-height: 1;
 }
 
@@ -1147,12 +1157,34 @@ a {
 .trace-panel summary {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 10px;
   min-height: 34px;
   padding: 9px 14px;
   cursor: pointer;
   font-weight: 600;
   line-height: 1;
+  list-style: none;
+}
+
+.trace-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.trace-panel summary::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  border-right: 1.6px solid var(--muted);
+  border-bottom: 1.6px solid var(--muted);
+  transform: translateY(-1px) rotate(45deg);
+  transition: transform 140ms ease;
+}
+
+.trace-panel[open] summary::after {
+  transform: translateY(1px) rotate(225deg);
 }
 
 .skill-panel.trace-panel {
