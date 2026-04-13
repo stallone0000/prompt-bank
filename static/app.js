@@ -65,6 +65,7 @@ const nodes = {
   difficultyBadge: document.getElementById("difficultyBadge"),
   questionTitle: document.getElementById("questionTitle"),
   questionSubtitle: document.getElementById("questionSubtitle"),
+  benchmarkHint: document.getElementById("benchmarkHint"),
   questionText: document.getElementById("questionText"),
   referenceAnswer: document.getElementById("referenceAnswer"),
   currentModel: document.getElementById("currentModel"),
@@ -1060,6 +1061,7 @@ function renderSelection() {
       : String(problem.difficulty || "Curated");
   nodes.questionTitle.textContent = problem.title;
   nodes.questionSubtitle.textContent = problem.subtitle;
+  renderBenchmarkHint(problem);
   nodes.questionText.textContent = problem.question;
   nodes.referenceAnswer.textContent = problem.answer;
   nodes.currentModel.textContent = state.payload.models[state.modelId]?.label || "-";
@@ -1070,6 +1072,33 @@ function renderSelection() {
     problem.skillText || problem.archived?.[state.modelId]?.trs?.skill_text || "(No skill card retrieved yet.)";
   nodes.skillCardSource.textContent = problem.retrieval?.datasetLabel ? `· ${problem.retrieval.datasetLabel}` : "";
   typesetMath([nodes.questionText, nodes.referenceAnswer, nodes.skillCard]);
+}
+
+function renderBenchmarkHint(problem) {
+  const stats = problem?.benchmarkDirectStats;
+  if (!stats || !Number.isFinite(Number(stats.total)) || Number(stats.total) <= 0) {
+    nodes.benchmarkHint.textContent = "";
+    nodes.benchmarkHint.classList.add("hidden");
+    return;
+  }
+
+  const correct = Math.max(0, Number(stats.correct) || 0);
+  const total = Math.max(1, Number(stats.total) || 0);
+  let note = "";
+  if (correct === 0) {
+    note = " Extremely hard. Correct answers may be unreachable, and max-length failure is possible.";
+  } else if (correct >= 1 && correct <= 4) {
+    note = " Hard benchmark problem. Expect long reasoning.";
+  }
+
+  nodes.benchmarkHint.innerHTML = "";
+  const lead = document.createElement("strong");
+  lead.textContent = `Doubao direct: ${correct}/${total}.`;
+  nodes.benchmarkHint.appendChild(lead);
+  if (note) {
+    nodes.benchmarkHint.appendChild(document.createTextNode(note));
+  }
+  nodes.benchmarkHint.classList.remove("hidden");
 }
 
 function laneNodes(lane) {

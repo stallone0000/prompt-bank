@@ -1,0 +1,728 @@
+{
+  "generatedAt": 1776104811,
+  "modelLabel": "Doubao direct",
+  "modelId": "doubao1.8",
+  "source": "benchmark-test/results/aops_unified_prompt_full/*/doubao1_8_direct.jsonl",
+  "byQuestionId": {
+    "aime_2024_i_001": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 1,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_002": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 2,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_003": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 3,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_004": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 4,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_005": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 5,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_006": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 6,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_007": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 7,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_008": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 8,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_009": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 9,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_010": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 10,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2024_i_011": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 11,
+      "correct": 20,
+      "total": 32
+    },
+    "aime_2024_i_012": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 12,
+      "correct": 0,
+      "total": 32
+    },
+    "aime_2024_i_013": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 13,
+      "correct": 29,
+      "total": 32
+    },
+    "aime_2024_i_014": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 14,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_i_015": {
+      "benchmark": "aime_2024_i",
+      "problemIdx": 15,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2024_ii_001": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 1,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_ii_002": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 2,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_ii_003": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 3,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_ii_004": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 4,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_ii_005": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 5,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2024_ii_006": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 6,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_ii_007": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 7,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_ii_008": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 8,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2024_ii_009": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 9,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2024_ii_010": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 10,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2024_ii_011": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 11,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_ii_012": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 12,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2024_ii_013": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 13,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_ii_014": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 14,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2024_ii_015": {
+      "benchmark": "aime_2024_ii",
+      "problemIdx": 15,
+      "correct": 0,
+      "total": 32
+    },
+    "aime_2025_001": {
+      "benchmark": "aime_2025",
+      "problemIdx": 1,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_002": {
+      "benchmark": "aime_2025",
+      "problemIdx": 2,
+      "correct": 24,
+      "total": 32
+    },
+    "aime_2025_003": {
+      "benchmark": "aime_2025",
+      "problemIdx": 3,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_004": {
+      "benchmark": "aime_2025",
+      "problemIdx": 4,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_005": {
+      "benchmark": "aime_2025",
+      "problemIdx": 5,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2025_006": {
+      "benchmark": "aime_2025",
+      "problemIdx": 6,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_007": {
+      "benchmark": "aime_2025",
+      "problemIdx": 7,
+      "correct": 25,
+      "total": 32
+    },
+    "aime_2025_008": {
+      "benchmark": "aime_2025",
+      "problemIdx": 8,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_009": {
+      "benchmark": "aime_2025",
+      "problemIdx": 9,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_010": {
+      "benchmark": "aime_2025",
+      "problemIdx": 10,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2025_011": {
+      "benchmark": "aime_2025",
+      "problemIdx": 11,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_012": {
+      "benchmark": "aime_2025",
+      "problemIdx": 12,
+      "correct": 28,
+      "total": 32
+    },
+    "aime_2025_013": {
+      "benchmark": "aime_2025",
+      "problemIdx": 13,
+      "correct": 2,
+      "total": 32
+    },
+    "aime_2025_014": {
+      "benchmark": "aime_2025",
+      "problemIdx": 14,
+      "correct": 2,
+      "total": 32
+    },
+    "aime_2025_015": {
+      "benchmark": "aime_2025",
+      "problemIdx": 15,
+      "correct": 0,
+      "total": 32
+    },
+    "aime_2025_016": {
+      "benchmark": "aime_2025",
+      "problemIdx": 16,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_017": {
+      "benchmark": "aime_2025",
+      "problemIdx": 17,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_018": {
+      "benchmark": "aime_2025",
+      "problemIdx": 18,
+      "correct": 29,
+      "total": 32
+    },
+    "aime_2025_019": {
+      "benchmark": "aime_2025",
+      "problemIdx": 19,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_020": {
+      "benchmark": "aime_2025",
+      "problemIdx": 20,
+      "correct": 30,
+      "total": 32
+    },
+    "aime_2025_021": {
+      "benchmark": "aime_2025",
+      "problemIdx": 21,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_022": {
+      "benchmark": "aime_2025",
+      "problemIdx": 22,
+      "correct": 23,
+      "total": 32
+    },
+    "aime_2025_023": {
+      "benchmark": "aime_2025",
+      "problemIdx": 23,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_024": {
+      "benchmark": "aime_2025",
+      "problemIdx": 24,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2025_025": {
+      "benchmark": "aime_2025",
+      "problemIdx": 25,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2025_026": {
+      "benchmark": "aime_2025",
+      "problemIdx": 26,
+      "correct": 30,
+      "total": 32
+    },
+    "aime_2025_027": {
+      "benchmark": "aime_2025",
+      "problemIdx": 27,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2025_028": {
+      "benchmark": "aime_2025",
+      "problemIdx": 28,
+      "correct": 13,
+      "total": 32
+    },
+    "aime_2025_029": {
+      "benchmark": "aime_2025",
+      "problemIdx": 29,
+      "correct": 9,
+      "total": 32
+    },
+    "aime_2025_030": {
+      "benchmark": "aime_2025",
+      "problemIdx": 30,
+      "correct": 0,
+      "total": 32
+    },
+    "aime_2026_001": {
+      "benchmark": "aime_2026",
+      "problemIdx": 1,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_002": {
+      "benchmark": "aime_2026",
+      "problemIdx": 2,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_003": {
+      "benchmark": "aime_2026",
+      "problemIdx": 3,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_004": {
+      "benchmark": "aime_2026",
+      "problemIdx": 4,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2026_005": {
+      "benchmark": "aime_2026",
+      "problemIdx": 5,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_006": {
+      "benchmark": "aime_2026",
+      "problemIdx": 6,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_007": {
+      "benchmark": "aime_2026",
+      "problemIdx": 7,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2026_008": {
+      "benchmark": "aime_2026",
+      "problemIdx": 8,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_009": {
+      "benchmark": "aime_2026",
+      "problemIdx": 9,
+      "correct": 24,
+      "total": 32
+    },
+    "aime_2026_010": {
+      "benchmark": "aime_2026",
+      "problemIdx": 10,
+      "correct": 11,
+      "total": 32
+    },
+    "aime_2026_011": {
+      "benchmark": "aime_2026",
+      "problemIdx": 11,
+      "correct": 30,
+      "total": 32
+    },
+    "aime_2026_012": {
+      "benchmark": "aime_2026",
+      "problemIdx": 12,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_013": {
+      "benchmark": "aime_2026",
+      "problemIdx": 13,
+      "correct": 14,
+      "total": 32
+    },
+    "aime_2026_014": {
+      "benchmark": "aime_2026",
+      "problemIdx": 14,
+      "correct": 27,
+      "total": 32
+    },
+    "aime_2026_015": {
+      "benchmark": "aime_2026",
+      "problemIdx": 15,
+      "correct": 0,
+      "total": 32
+    },
+    "aime_2026_016": {
+      "benchmark": "aime_2026",
+      "problemIdx": 16,
+      "correct": 28,
+      "total": 32
+    },
+    "aime_2026_017": {
+      "benchmark": "aime_2026",
+      "problemIdx": 17,
+      "correct": 30,
+      "total": 32
+    },
+    "aime_2026_018": {
+      "benchmark": "aime_2026",
+      "problemIdx": 18,
+      "correct": 20,
+      "total": 32
+    },
+    "aime_2026_019": {
+      "benchmark": "aime_2026",
+      "problemIdx": 19,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_020": {
+      "benchmark": "aime_2026",
+      "problemIdx": 20,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_021": {
+      "benchmark": "aime_2026",
+      "problemIdx": 21,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_022": {
+      "benchmark": "aime_2026",
+      "problemIdx": 22,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_023": {
+      "benchmark": "aime_2026",
+      "problemIdx": 23,
+      "correct": 30,
+      "total": 32
+    },
+    "aime_2026_024": {
+      "benchmark": "aime_2026",
+      "problemIdx": 24,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_025": {
+      "benchmark": "aime_2026",
+      "problemIdx": 25,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_026": {
+      "benchmark": "aime_2026",
+      "problemIdx": 26,
+      "correct": 32,
+      "total": 32
+    },
+    "aime_2026_027": {
+      "benchmark": "aime_2026",
+      "problemIdx": 27,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2026_028": {
+      "benchmark": "aime_2026",
+      "problemIdx": 28,
+      "correct": 31,
+      "total": 32
+    },
+    "aime_2026_029": {
+      "benchmark": "aime_2026",
+      "problemIdx": 29,
+      "correct": 8,
+      "total": 32
+    },
+    "aime_2026_030": {
+      "benchmark": "aime_2026",
+      "problemIdx": 30,
+      "correct": 1,
+      "total": 32
+    },
+    "hmmt_nov_2025_001": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 1,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_002": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 2,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_003": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 3,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_004": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 4,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_005": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 5,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_006": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 6,
+      "correct": 13,
+      "total": 32
+    },
+    "hmmt_nov_2025_007": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 7,
+      "correct": 18,
+      "total": 32
+    },
+    "hmmt_nov_2025_008": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 8,
+      "correct": 18,
+      "total": 32
+    },
+    "hmmt_nov_2025_009": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 9,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_010": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 10,
+      "correct": 0,
+      "total": 32
+    },
+    "hmmt_nov_2025_011": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 11,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_012": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 12,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_013": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 13,
+      "correct": 21,
+      "total": 32
+    },
+    "hmmt_nov_2025_014": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 14,
+      "correct": 31,
+      "total": 32
+    },
+    "hmmt_nov_2025_015": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 15,
+      "correct": 28,
+      "total": 32
+    },
+    "hmmt_nov_2025_016": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 16,
+      "correct": 13,
+      "total": 32
+    },
+    "hmmt_nov_2025_017": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 17,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_018": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 18,
+      "correct": 31,
+      "total": 32
+    },
+    "hmmt_nov_2025_019": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 19,
+      "correct": 27,
+      "total": 32
+    },
+    "hmmt_nov_2025_020": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 20,
+      "correct": 31,
+      "total": 32
+    },
+    "hmmt_nov_2025_021": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 21,
+      "correct": 31,
+      "total": 32
+    },
+    "hmmt_nov_2025_022": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 22,
+      "correct": 23,
+      "total": 32
+    },
+    "hmmt_nov_2025_023": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 23,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_024": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 24,
+      "correct": 31,
+      "total": 32
+    },
+    "hmmt_nov_2025_025": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 25,
+      "correct": 31,
+      "total": 32
+    },
+    "hmmt_nov_2025_026": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 26,
+      "correct": 26,
+      "total": 32
+    },
+    "hmmt_nov_2025_027": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 27,
+      "correct": 21,
+      "total": 32
+    },
+    "hmmt_nov_2025_028": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 28,
+      "correct": 0,
+      "total": 32
+    },
+    "hmmt_nov_2025_029": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 29,
+      "correct": 32,
+      "total": 32
+    },
+    "hmmt_nov_2025_030": {
+      "benchmark": "hmmt_nov_2025",
+      "problemIdx": 30,
+      "correct": 8,
+      "total": 32
+    }
+  }
+}

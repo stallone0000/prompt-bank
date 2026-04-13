@@ -935,6 +935,17 @@ a {
   line-height: 1.38;
 }
 
+.benchmark-hint {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #c14434;
+}
+
+.benchmark-hint strong {
+  font-weight: 700;
+}
+
 .question-text,
 .skill-card,
 .trace-panel pre {

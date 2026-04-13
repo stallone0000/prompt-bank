@@ -28,6 +28,7 @@ STATIC_DIR = APP_DIR / "static"
 DATA_PATH = APP_DIR / "data" / "demo_examples.json"
 BENCHMARK_GROUPS_PATH = APP_DIR / "data" / "benchmark_example_groups.json"
 EXAMPLE_PREVIEW_MAP_PATH = APP_DIR / "data" / "example_preview_map.json"
+BENCHMARK_DIRECT_ACCURACY_PATH = APP_DIR / "data" / "benchmark_direct_accuracy.json"
 DEEPMATH_SKILL_CORPUS_PATH = APP_DIR / "data" / "deepmath_103k_oss_skill_corpus.jsonl.gz"
 AOPS_SKILL_CORPUS_PATH = APP_DIR / "data" / "aops_skill_corpus.jsonl.gz"
 LEGACY_SKILL_CORPUS_PATH = APP_DIR / "data" / "trs_skill_corpus.jsonl"
@@ -609,6 +610,11 @@ def load_benchmark_example_groups() -> tuple[list[Dict[str, Any]], list[Dict[str
     with BENCHMARK_GROUPS_PATH.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
 
+    benchmark_accuracy: dict[str, Any] = {}
+    if BENCHMARK_DIRECT_ACCURACY_PATH.exists():
+        with BENCHMARK_DIRECT_ACCURACY_PATH.open("r", encoding="utf-8") as handle:
+            benchmark_accuracy = (json.load(handle).get("byQuestionId") or {})
+
     groups: list[Dict[str, Any]] = []
     examples: list[Dict[str, Any]] = []
     for raw_group in payload.get("groups", []):
@@ -626,6 +632,7 @@ def load_benchmark_example_groups() -> tuple[list[Dict[str, Any]], list[Dict[str
                 "topic": option.get("topic") or raw_group.get("label") or "Benchmark",
                 "difficulty": option.get("difficulty") or "Benchmark",
                 "benchmark": option.get("benchmark") or "",
+                "benchmarkDirectStats": deepcopy(benchmark_accuracy.get(option.get("questionId") or "")) or None,
                 "archived": {
                     model_id: deepcopy(resolve_archived_example_for_model({}, model_id))
                     for model_id in MODEL_CONFIGS
@@ -753,6 +760,7 @@ def load_precomputed_example_previews(examples_by_id: Dict[str, Dict[str, Any]])
                 "answer": example.get("answer") or canonicalized.get("answer") or "",
                 "topic": example.get("topic") or canonicalized.get("topic") or "",
                 "difficulty": example.get("difficulty") or canonicalized.get("difficulty") or "",
+                "benchmarkDirectStats": deepcopy(example.get("benchmarkDirectStats")) or None,
                 "sourceMode": "example",
             }
         )
@@ -1136,6 +1144,7 @@ def build_preview_example(base_context: Dict[str, Any], retrieval: Dict[str, Any
         "topic": base_context.get("topic") or ("Custom Input" if source_mode == "custom" else ""),
         "difficulty": base_context.get("difficulty") or ("User" if source_mode == "custom" else ""),
         "sourceMode": source_mode,
+        "benchmarkDirectStats": deepcopy(base_context.get("benchmarkDirectStats")) or None,
         "archived": {
             model_id: deepcopy(archived_template)
             for model_id in MODEL_CONFIGS
@@ -1170,6 +1179,7 @@ def serialize_preview(example: Dict[str, Any]) -> Dict[str, Any]:
         "skillText": first_archived["trs"]["skill_text"],
         "skillScore": first_archived["trs"]["skill_score"],
         "retrieval": example["retrieval"],
+        "benchmarkDirectStats": deepcopy(example.get("benchmarkDirectStats")) or None,
         "highlight": example.get("highlight") or "",
         "sourceMode": example.get("sourceMode") or "custom",
     }
@@ -1956,6 +1966,10 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 "subtitle": payload.get("subtitle") or "",
                 "topic": payload.get("topic") or "Custom Input",
                 "difficulty": payload.get("difficulty") or "User",
+                "benchmarkDirectStats": deepcopy(
+                    (self.server.examples_by_id.get(payload.get("id") or "", {}) or {}).get("benchmarkDirectStats")
+                )
+                or None,
                 "question": question,
                 "answer": reference_answer,
                 "sourceMode": payload.get("sourceMode") or "custom",

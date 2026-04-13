@@ -17,8 +17,10 @@ from urllib import error, request
 APP_DIR = Path(__file__).resolve().parents[1]
 WORKSPACE_DIR = APP_DIR.parent
 BENCHMARK_DIR = WORKSPACE_DIR / "benchmark-test" / "benchmarks"
+BENCHMARK_RESULTS_DIR = WORKSPACE_DIR / "benchmark-test" / "results" / "aops_unified_prompt_full"
 BENCHMARK_GROUPS_PATH = APP_DIR / "data" / "benchmark_example_groups.json"
 BENCHMARK_TYPE_PATH = APP_DIR / "data" / "benchmark_problem_types.json"
+BENCHMARK_DIRECT_ACCURACY_PATH = APP_DIR / "data" / "benchmark_direct_accuracy.json"
 PREVIEW_MAP_PATH = APP_DIR / "data" / "example_preview_map.json"
 
 API_URL = os.environ.get("QIHOO_API_URL", "http://api.360.cn/v1/chat/completions")
@@ -349,6 +351,38 @@ def build_preview_map() -> dict[str, Any]:
     }
 
 
+def build_benchmark_direct_accuracy() -> dict[str, Any]:
+    by_question_id: dict[str, dict[str, Any]] = {}
+    benchmark_names = {part[0] for spec in BENCHMARK_GROUP_SPECS for part in spec["parts"]}
+
+    for benchmark_name in sorted(benchmark_names):
+        path = BENCHMARK_RESULTS_DIR / benchmark_name / "doubao1_8_direct.jsonl"
+        if not path.exists():
+            raise FileNotFoundError(f"Missing benchmark direct result file at {path}")
+
+        for row in load_jsonl(path):
+            question_id = str(row["question_id"])
+            stats = by_question_id.setdefault(
+                question_id,
+                {
+                    "benchmark": benchmark_name,
+                    "problemIdx": int(row.get("problem_idx") or 0),
+                    "correct": 0,
+                    "total": 0,
+                },
+            )
+            stats["total"] += 1
+            stats["correct"] += 1 if int(row.get("is_correct") or 0) == 1 else 0
+
+    return {
+        "generatedAt": int(time.time()),
+        "modelLabel": "Doubao direct",
+        "modelId": "doubao1.8",
+        "source": "benchmark-test/results/aops_unified_prompt_full/*/doubao1_8_direct.jsonl",
+        "byQuestionId": by_question_id,
+    }
+
+
 def build_benchmark_type_labels(api_key: str, *, model: str, workers: int) -> dict[str, Any]:
     opener = opener_with_proxy()
     existing = load_json(BENCHMARK_TYPE_PATH, {"labels": {}})
@@ -438,6 +472,10 @@ def main() -> None:
     groups_payload = build_benchmark_groups(type_payload["labels"])
     write_json(BENCHMARK_GROUPS_PATH, groups_payload)
     print(f"[groups] wrote {BENCHMARK_GROUPS_PATH}", flush=True)
+
+    accuracy_payload = build_benchmark_direct_accuracy()
+    write_json(BENCHMARK_DIRECT_ACCURACY_PATH, accuracy_payload)
+    print(f"[accuracy] wrote {BENCHMARK_DIRECT_ACCURACY_PATH}", flush=True)
 
     if not args.skip_previews:
         preview_payload = build_preview_map()
