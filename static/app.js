@@ -184,18 +184,18 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function formatHintLine(line) {
+function formatHintKeywords(line) {
   const pattern = /\b(hints?)\b/gi;
   let cursor = 0;
   let html = "";
   let match;
   while ((match = pattern.exec(line))) {
     html += escapeHtml(line.slice(cursor, match.index));
-    html += `<strong>${escapeHtml(match[0])}</strong>`;
+    html += `<strong class="trace-hint-keyword">${escapeHtml(match[0])}</strong>`;
     cursor = match.index + match[0].length;
   }
   html += escapeHtml(line.slice(cursor));
-  return `<span class="trace-hint-line">${html}</span>`;
+  return html;
 }
 
 function renderTraceHtml(text, highlightHints = false) {
@@ -203,7 +203,7 @@ function renderTraceHtml(text, highlightHints = false) {
     .split("\n")
     .map((line) => {
       if (highlightHints && /\bhints?\b/i.test(line)) {
-        return formatHintLine(line);
+        return formatHintKeywords(line);
       }
       return escapeHtml(line);
     })
@@ -776,6 +776,35 @@ function metricRow(label, value, tone = "") {
   return wrapper;
 }
 
+function summarizeTrend(value, formatter) {
+  if (!Number.isFinite(value)) {
+    return {
+      tone: "flat",
+      arrow: "→",
+      text: "N/A",
+    };
+  }
+  if (value > 0) {
+    return {
+      tone: "down",
+      arrow: "↓",
+      text: formatter(value),
+    };
+  }
+  if (value < 0) {
+    return {
+      tone: "up",
+      arrow: "↑",
+      text: formatter(Math.abs(value)),
+    };
+  }
+  return {
+    tone: "flat",
+    arrow: "→",
+    text: formatter(0),
+  };
+}
+
 function renderLiveMetrics(container, result) {
   const correctness = result.correctness || {};
   container.innerHTML = "";
@@ -814,24 +843,29 @@ function renderLiveSummary(summary) {
   const cards = [
     {
       label: "Output Tokens Saved",
-      value: formatMaybeNumber(summary.completion_tokens_saved),
+      trend: summarizeTrend(summary.completion_tokens_saved, formatNumber),
     },
     {
       label: "Output Reduction",
-      value: formatMaybeReductionPercent(summary.completion_reduction_pct),
+      trend: summarizeTrend(summary.completion_reduction_pct, formatReductionPercent),
     },
     {
-      label: "Paper-Priced Cost Saved",
-      value: formatMaybeYuan(summary.cost_saved_yuan),
+      label: "Cost Saved",
+      trend: summarizeTrend(summary.cost_saved_yuan, formatYuan),
     },
   ];
   cards.forEach((card) => {
     const div = document.createElement("div");
-    div.className = "summary-card live";
+    div.className = `summary-card live ${card.trend.tone}`;
     const span = document.createElement("span");
     span.textContent = card.label;
     const strong = document.createElement("strong");
-    strong.textContent = card.value;
+    const arrow = document.createElement("span");
+    arrow.className = "summary-arrow";
+    arrow.textContent = card.trend.arrow;
+    const text = document.createElement("span");
+    text.textContent = card.trend.text;
+    strong.append(arrow, text);
     div.append(span, strong);
     nodes.liveSummary.appendChild(div);
   });
