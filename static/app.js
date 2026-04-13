@@ -579,14 +579,19 @@ function renderSkillDatasetControls() {
       updateSkillDatasetMeta();
       clearLiveResults();
       try {
+        const preloadExamples = prepareExamplePreview({ clearResults: false, force: true });
         if (state.sourceMode === "custom") {
           if (!state.customDirty && state.customDraft.question.trim() && state.customDraft.answer.trim()) {
-            await prepareCustomProblem({ clearResults: false, force: true });
+            await Promise.all([
+              preloadExamples,
+              prepareCustomProblem({ clearResults: false, force: true }),
+            ]);
           } else {
+            await preloadExamples;
             renderSelection();
           }
         } else {
-          await prepareExamplePreview({ clearResults: false, force: true });
+          await preloadExamples;
         }
       } catch (error) {
         nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
@@ -615,6 +620,22 @@ function examplePreviewCacheKey(exampleId = state.exampleId, datasetIds = state.
 
 function currentExamplePreview() {
   return state.examplePreviewCache[examplePreviewCacheKey()] || null;
+}
+
+function exampleIds() {
+  return (state.payload?.examples || []).map((example) => example.id);
+}
+
+function hasCompleteExamplePreviewCache(datasetIds = state.skillDatasetIds) {
+  const keySuffix = `@@${datasetSelectionKey(datasetIds)}`;
+  return exampleIds().every((exampleId) => state.examplePreviewCache[`${exampleId}${keySuffix}`]);
+}
+
+function storeExamplePreviews(previews, datasetIds = state.skillDatasetIds) {
+  const keySuffix = `@@${datasetSelectionKey(datasetIds)}`;
+  previews.forEach((preview) => {
+    state.examplePreviewCache[`${preview.id}${keySuffix}`] = preview;
+  });
 }
 
 function cancelExampleLookup() {
@@ -753,13 +774,12 @@ async function prepareExamplePreview(options = {}) {
     return null;
   }
 
-  const cacheKey = examplePreviewCacheKey(example.id);
-  if (!force && state.examplePreviewCache[cacheKey]) {
+  if (!force && hasCompleteExamplePreviewCache()) {
     renderSelection();
     if (clearResults) {
       clearLiveResults();
     }
-    return state.examplePreviewCache[cacheKey];
+    return currentExamplePreview();
   }
 
   const requestId = state.exampleLookupRequestId + 1;
@@ -773,7 +793,7 @@ async function prepareExamplePreview(options = {}) {
   renderSelection();
 
   try {
-    const response = await fetch("/api/retrieve_skill", {
+    const response = await fetch("/api/preload_examples", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -781,31 +801,22 @@ async function prepareExamplePreview(options = {}) {
       cache: "no-store",
       signal: controller.signal,
       body: JSON.stringify({
-        id: example.id,
-        questionId: example.questionId,
-        title: example.title,
-        subtitle: example.subtitle,
-        topic: example.topic,
-        difficulty: example.difficulty,
-        question: example.question,
-        referenceAnswer: example.answer,
-        sourceMode: "example",
         skillDatasetIds: state.skillDatasetIds,
       }),
     });
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "Failed to retrieve a skill card.");
+      throw new Error(payload.error || "Failed to preload retrieved skill cards.");
     }
     if (requestId !== state.exampleLookupRequestId) {
       return null;
     }
-    state.examplePreviewCache[cacheKey] = payload.preview;
+    storeExamplePreviews(payload.previews || [], payload.datasetIds || state.skillDatasetIds);
     renderSelection();
     if (clearResults) {
       clearLiveResults();
     }
-    return payload.preview;
+    return currentExamplePreview();
   } catch (error) {
     if (error?.name === "AbortError") {
       return null;
@@ -946,9 +957,7 @@ function renderExamples() {
       nodes.customStatus.textContent = "Switch back to Custom Problem to search the selected skill datasets.";
       setSourceMode("example");
       clearLiveResults();
-      try {
-        await prepareExamplePreview({ clearResults: false });
-      } catch {}
+      renderSelection();
     });
 
     card.append(kicker, title, subtitle, select);
