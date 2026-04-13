@@ -203,6 +203,7 @@ a {
 .sidebar {
   display: grid;
   gap: 12px;
+  align-content: start;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -274,6 +275,7 @@ a {
 .sidebar-panel {
   display: grid;
   gap: 8px;
+  align-content: start;
   padding: 11px;
   border: 1px solid rgba(31, 31, 31, 0.06);
   border-radius: 14px;
@@ -566,6 +568,7 @@ a {
 .stage {
   display: grid;
   gap: 6px;
+  align-content: start;
 }
 
 .control-bar,
@@ -589,12 +592,14 @@ a {
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
   gap: 10px 14px;
   align-items: start;
+  align-content: start;
   padding: 9px 13px;
 }
 
 .control-bar {
   display: grid;
   gap: 0;
+  align-content: start;
   padding: 10px 14px 9px;
 }
 
@@ -613,6 +618,7 @@ a {
   min-width: 0;
   display: grid;
   gap: 0;
+  align-content: start;
 }
 
 .picker-copy {
@@ -882,6 +888,7 @@ a {
 .context-stack {
   display: grid;
   gap: 6px;
+  align-content: start;
 }
 
 .question-summary,
@@ -983,6 +990,7 @@ a {
 
 .comparison-panel {
   background: var(--panel);
+  align-content: start;
 }
 
 .section-heading {
