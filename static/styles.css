@@ -63,6 +63,19 @@ a {
   min-width: 0;
 }
 
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.topbar-logo {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+
 .topbar h1,
 .sidebar-head h2,
 .section-heading h3,
@@ -71,9 +84,9 @@ a {
 }
 
 .topbar h1 {
-  font-size: clamp(1.08rem, 1.5vw, 1.28rem);
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: clamp(1.3rem, 2vw, 1.58rem);
+  font-weight: 700;
+  line-height: 1.14;
 }
 
 .topbar-meta {
@@ -131,7 +144,7 @@ a {
 }
 
 .sidebar-head h2 {
-  font-size: 0.94rem;
+  font-size: 1.06rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -168,7 +181,6 @@ a {
   transform: translateY(-1px);
 }
 
-.mode-card-kicker,
 .custom-label {
   font-size: 0.7rem;
   font-weight: 600;
@@ -178,7 +190,7 @@ a {
 }
 
 .mode-card strong {
-  font-size: 0.88rem;
+  font-size: 1.02rem;
   font-weight: 700;
 }
 
@@ -337,8 +349,9 @@ a {
 
 .field-label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 0.7rem;
+  margin-bottom: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
@@ -365,13 +378,6 @@ a {
   gap: 8px;
   flex: 1 1 420px;
   flex-wrap: wrap;
-}
-
-.picker-copy p {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.35;
-  color: var(--muted);
 }
 
 .picker-note {
