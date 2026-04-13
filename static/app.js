@@ -782,10 +782,18 @@ function renderLiveMetrics(container, result) {
   const rows = [
     metricRow("Input tokens", formatMaybeNumber(result.prompt_tokens)),
     metricRow("Output tokens (CoT + response)", formatMaybeNumber(result.completion_tokens), "accent"),
+  ];
+  if (Number.isFinite(result.reasoning_tokens)) {
+    rows.push(metricRow("Hidden reasoning tokens", formatMaybeNumber(result.reasoning_tokens)));
+  }
+  if (Number.isFinite(result.visible_completion_tokens)) {
+    rows.push(metricRow("Visible answer tokens", formatMaybeNumber(result.visible_completion_tokens)));
+  }
+  rows.push(
     metricRow("Cost (input + output pricing)", formatMaybeYuan(result.cost_yuan)),
     metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
-    metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status)),
-  ];
+    metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status))
+  );
   if (result.stop_label) {
     rows.push(
       metricRow(

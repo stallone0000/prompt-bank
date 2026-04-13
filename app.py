@@ -1108,6 +1108,11 @@ def build_result(
     prompt_tokens = parse_usage_int(usage.get("prompt_tokens"))
     completion_tokens = parse_usage_int(usage.get("completion_tokens"))
     total_tokens = parse_usage_int(usage.get("total_tokens"))
+    completion_details = usage.get("completion_tokens_details", {}) if isinstance(usage.get("completion_tokens_details"), dict) else {}
+    reasoning_tokens = parse_usage_int(completion_details.get("reasoning_tokens"))
+    visible_completion_tokens = None
+    if completion_tokens is not None and reasoning_tokens is not None:
+        visible_completion_tokens = max(0, completion_tokens - reasoning_tokens)
     cost_yuan = None
     if prompt_tokens is not None and completion_tokens is not None:
         cost_yuan = round(compute_cost_yuan(prompt_tokens, completion_tokens, config), 6)
@@ -1120,6 +1125,8 @@ def build_result(
         "answer_text": answer_text or "",
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "visible_completion_tokens": visible_completion_tokens,
         "total_tokens": total_tokens,
         "cost_yuan": cost_yuan,
         "correctness": correctness,
