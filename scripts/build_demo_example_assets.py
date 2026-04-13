@@ -376,7 +376,7 @@ def build_benchmark_direct_accuracy() -> dict[str, Any]:
 
     return {
         "generatedAt": int(time.time()),
-        "modelLabel": "Doubao direct",
+        "modelLabel": "Doubao 1.8",
         "modelId": "doubao1.8",
         "source": "benchmark-test/results/aops_unified_prompt_full/*/doubao1_8_direct.jsonl",
         "byQuestionId": by_question_id,

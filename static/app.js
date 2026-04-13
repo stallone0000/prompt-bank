@@ -1084,6 +1084,7 @@ function renderBenchmarkHint(problem) {
 
   const correct = Math.max(0, Number(stats.correct) || 0);
   const total = Math.max(1, Number(stats.total) || 0);
+  const modelLabel = String(stats.modelLabel || "Doubao 1.8").trim() || "Doubao 1.8";
   let note = "";
   if (correct === 0) {
     note = " Extremely hard. Correct answers may be unreachable, and max-length failure is possible.";
@@ -1093,7 +1094,7 @@ function renderBenchmarkHint(problem) {
 
   nodes.benchmarkHint.innerHTML = "";
   const lead = document.createElement("strong");
-  lead.textContent = `Doubao direct: ${correct}/${total}.`;
+  lead.textContent = `${modelLabel} pass rate: ${correct}/${total}.`;
   nodes.benchmarkHint.appendChild(lead);
   if (note) {
     nodes.benchmarkHint.appendChild(document.createTextNode(note));

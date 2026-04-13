@@ -611,9 +611,14 @@ def load_benchmark_example_groups() -> tuple[list[Dict[str, Any]], list[Dict[str
         payload = json.load(handle)
 
     benchmark_accuracy: dict[str, Any] = {}
+    benchmark_accuracy_model_label = "Doubao 1.8"
+    benchmark_accuracy_model_id = "doubao1.8"
     if BENCHMARK_DIRECT_ACCURACY_PATH.exists():
         with BENCHMARK_DIRECT_ACCURACY_PATH.open("r", encoding="utf-8") as handle:
-            benchmark_accuracy = (json.load(handle).get("byQuestionId") or {})
+            accuracy_payload = json.load(handle)
+        benchmark_accuracy = (accuracy_payload.get("byQuestionId") or {})
+        benchmark_accuracy_model_label = str(accuracy_payload.get("modelLabel") or benchmark_accuracy_model_label)
+        benchmark_accuracy_model_id = str(accuracy_payload.get("modelId") or benchmark_accuracy_model_id)
 
     groups: list[Dict[str, Any]] = []
     examples: list[Dict[str, Any]] = []
@@ -632,7 +637,13 @@ def load_benchmark_example_groups() -> tuple[list[Dict[str, Any]], list[Dict[str
                 "topic": option.get("topic") or raw_group.get("label") or "Benchmark",
                 "difficulty": option.get("difficulty") or "Benchmark",
                 "benchmark": option.get("benchmark") or "",
-                "benchmarkDirectStats": deepcopy(benchmark_accuracy.get(option.get("questionId") or "")) or None,
+                "benchmarkDirectStats": {
+                    **deepcopy(benchmark_accuracy.get(option.get("questionId") or "") or {}),
+                    "modelLabel": benchmark_accuracy_model_label,
+                    "modelId": benchmark_accuracy_model_id,
+                }
+                if benchmark_accuracy.get(option.get("questionId") or "")
+                else None,
                 "archived": {
                     model_id: deepcopy(resolve_archived_example_for_model({}, model_id))
                     for model_id in MODEL_CONFIGS
