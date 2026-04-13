@@ -4,6 +4,13 @@ const state = {
   selectedFamilyId: null,
   familySelections: {},
   exampleId: null,
+  sourceMode: "example",
+  customDraft: {
+    question: "",
+    answer: "",
+  },
+  customContext: null,
+  customDirty: false,
   running: false,
   activeModel: null,
   streamProgress: {
@@ -29,6 +36,10 @@ const STREAM_CONNECT_MAX_RETRIES = 4;
 const RUN_RESTART_MAX_RETRIES = 3;
 
 const nodes = {
+  customQuestion: document.getElementById("customQuestion"),
+  customAnswer: document.getElementById("customAnswer"),
+  applyCustomButton: document.getElementById("applyCustomButton"),
+  customStatus: document.getElementById("customStatus"),
   exampleList: document.getElementById("exampleList"),
   modelCount: document.getElementById("modelCount"),
   modelGroupGrid: document.getElementById("modelGroupGrid"),
@@ -154,6 +165,52 @@ function typesetMath(targets = []) {
   }
   window.MathJax.typesetClear(targets);
   window.MathJax.typesetPromise(targets).catch(() => {});
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatHintLine(line) {
+  const pattern = /\b(hints?)\b/gi;
+  let cursor = 0;
+  let html = "";
+  let match;
+  while ((match = pattern.exec(line))) {
+    html += escapeHtml(line.slice(cursor, match.index));
+    html += `<strong>${escapeHtml(match[0])}</strong>`;
+    cursor = match.index + match[0].length;
+  }
+  html += escapeHtml(line.slice(cursor));
+  return `<span class="trace-hint-line">${html}</span>`;
+}
+
+function renderTraceHtml(text, highlightHints = false) {
+  return String(text || "")
+    .split("\n")
+    .map((line) => {
+      if (highlightHints && /\bhints?\b/i.test(line)) {
+        return formatHintLine(line);
+      }
+      return escapeHtml(line);
+    })
+    .join("\n");
+}
+
+function setTraceContent(node, text, { highlightHints = false } = {}) {
+  const rawText = String(text || "");
+  node.dataset.rawText = rawText;
+  node.innerHTML = renderTraceHtml(rawText, highlightHints);
+}
+
+function appendTraceContent(node, text, { highlightHints = false } = {}) {
+  const nextText = `${node.dataset.rawText || ""}${text}`;
+  setTraceContent(node, nextText, { highlightHints });
 }
 
 function normalizeLookupValue(value) {
@@ -403,6 +460,92 @@ function renderModelSelector() {
   state.modelId = state.familySelections[activeFamily];
 }
 
+function selectedExample() {
+  return state.payload.examples.find((example) => example.id === state.exampleId);
+}
+
+function currentProblemContext() {
+  if (state.sourceMode === "custom" && state.customContext) {
+    return state.customContext;
+  }
+  return selectedExample();
+}
+
+function describeCustomMatch(custom) {
+  const retrieval = custom?.retrieval || {};
+  const parts = [];
+  if (retrieval.sourceLabel) {
+    parts.push(`Retrieved from ${retrieval.sourceLabel}`);
+  }
+  if (retrieval.matchedTopic) {
+    parts.push(retrieval.matchedTopic);
+  }
+  return parts.join(" · ") || "Retrieved skill card ready.";
+}
+
+function applyCustomSelection(custom) {
+  state.customContext = custom;
+  state.sourceMode = "custom";
+  state.customDirty = false;
+  nodes.customStatus.textContent = describeCustomMatch(custom);
+  renderExamples();
+  renderSelection();
+  clearLiveResults();
+}
+
+function syncCustomDraftFromInputs() {
+  state.customDraft = {
+    question: nodes.customQuestion.value,
+    answer: nodes.customAnswer.value,
+  };
+}
+
+function markCustomDirty() {
+  syncCustomDraftFromInputs();
+  state.customDirty = true;
+  if (state.sourceMode === "custom") {
+    nodes.customStatus.textContent = "Custom problem changed. Retrieve again or press Run to refresh the skill card.";
+  }
+}
+
+async function prepareCustomProblem() {
+  if (state.running) {
+    throw new Error("Stop the current run before preparing a new custom problem.");
+  }
+
+  syncCustomDraftFromInputs();
+  const question = state.customDraft.question.trim();
+  const answer = state.customDraft.answer.trim();
+  if (!question || !answer) {
+    throw new Error("Custom mode requires both a question and a reference answer.");
+  }
+
+  nodes.applyCustomButton.disabled = true;
+  nodes.customStatus.textContent = "Retrieving the closest TRS skill card...";
+
+  try {
+    const response = await fetch("/api/retrieve_skill", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+      body: JSON.stringify({
+        question,
+        referenceAnswer: answer,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Failed to retrieve a skill card.");
+    }
+    applyCustomSelection(payload.custom);
+    return payload.custom;
+  } finally {
+    nodes.applyCustomButton.disabled = false;
+  }
+}
+
 function renderExamples() {
   nodes.exampleList.innerHTML = "";
   state.payload.examples.forEach((example) => {
@@ -410,11 +553,13 @@ function renderExamples() {
     const button = fragment.querySelector(".example-card");
     fragment.querySelector(".example-kicker").textContent = `${example.topic.split(" -> ").slice(-1)[0]} · D${example.difficulty}`;
     fragment.querySelector(".example-title").textContent = example.title;
-    if (example.id === state.exampleId) {
+    if (state.sourceMode === "example" && example.id === state.exampleId) {
       button.classList.add("active");
     }
     button.addEventListener("click", () => {
+      state.sourceMode = "example";
       state.exampleId = example.id;
+      nodes.customStatus.textContent = "Using a curated example. Retrieve a custom skill card to switch back.";
       renderExamples();
       renderSelection();
       clearLiveResults();
@@ -423,22 +568,22 @@ function renderExamples() {
   });
 }
 
-function selectedExample() {
-  return state.payload.examples.find((example) => example.id === state.exampleId);
-}
-
 function renderSelection() {
-  const example = selectedExample();
-  const archived = example.archived[state.modelId];
-  nodes.topicBadge.textContent = example.topic.split(" -> ").slice(-2).join(" • ");
-  nodes.difficultyBadge.textContent = `Difficulty ${example.difficulty}`;
-  nodes.questionTitle.textContent = example.title;
-  nodes.questionSubtitle.textContent = example.subtitle;
-  nodes.questionText.textContent = example.question;
-  nodes.referenceAnswer.textContent = example.answer;
+  const problem = currentProblemContext();
+  const isCustom = state.sourceMode === "custom" && state.customContext;
+  nodes.topicBadge.textContent = isCustom
+    ? "Custom Input"
+    : problem.topic.split(" -> ").slice(-2).join(" • ");
+  nodes.difficultyBadge.textContent = isCustom
+    ? "Retrieved Skill"
+    : `Difficulty ${problem.difficulty}`;
+  nodes.questionTitle.textContent = isCustom ? problem.title : problem.title;
+  nodes.questionSubtitle.textContent = isCustom ? problem.subtitle : problem.subtitle;
+  nodes.questionText.textContent = problem.question;
+  nodes.referenceAnswer.textContent = problem.answer;
   nodes.currentModel.textContent = state.payload.models[state.modelId]?.label || "-";
   nodes.verifierModel.textContent = state.payload.verifier?.model || "openai/gpt-5-mini";
-  nodes.skillCard.textContent = archived.trs.skill_text;
+  nodes.skillCard.textContent = isCustom ? problem.skillText : problem.archived[state.modelId].trs.skill_text;
   typesetMath([nodes.questionText, nodes.referenceAnswer, nodes.skillCard]);
 }
 
@@ -448,11 +593,13 @@ function laneNodes(lane) {
         metrics: nodes.directMetrics,
         reasoning: nodes.directReasoning,
         answer: nodes.directAnswer,
+        highlightHints: false,
       }
     : {
         metrics: nodes.trsMetrics,
         reasoning: nodes.trsReasoning,
         answer: nodes.trsAnswer,
+        highlightHints: true,
       };
 }
 
@@ -467,8 +614,8 @@ function resetLanePanels() {
   ["direct", "trs"].forEach((lane) => {
     const laneNode = laneNodes(lane);
     laneNode.metrics.innerHTML = "";
-    laneNode.reasoning.textContent = "";
-    laneNode.answer.textContent = "";
+    setTraceContent(laneNode.reasoning, "", { highlightHints: laneNode.highlightHints });
+    setTraceContent(laneNode.answer, "", { highlightHints: laneNode.highlightHints });
     setLaneStreaming(lane, false);
   });
 }
@@ -478,12 +625,16 @@ function seedLanePlaceholders(lane, retry = false) {
   const answerPlaceholder = retry
     ? "(Retrying after a transient API error...)"
     : "(Waiting for the response...)";
-  laneNode.answer.textContent = answerPlaceholder;
-  laneNode.reasoning.textContent = state.activeModel?.showsReasoningTrace
-    ? retry
-      ? "(Retrying. The chain of thought will restart if the model returns one.)"
-      : "(Waiting for the chain of thought...)"
-    : "(This model does not return a separate chain of thought.)";
+  setTraceContent(laneNode.answer, answerPlaceholder, { highlightHints: laneNode.highlightHints });
+  setTraceContent(
+    laneNode.reasoning,
+    state.activeModel?.showsReasoningTrace
+      ? retry
+        ? "(Retrying. The chain of thought will restart if the model returns one.)"
+        : "(Waiting for the chain of thought...)"
+      : "(This model does not return a separate chain of thought.)",
+    { highlightHints: laneNode.highlightHints }
+  );
 }
 
 function clearLiveResults() {
@@ -507,13 +658,23 @@ function metricRow(label, value, tone = "") {
 function renderLiveMetrics(container, result) {
   const correctness = result.correctness || {};
   container.innerHTML = "";
-  container.append(
+  const rows = [
     metricRow("Input tokens", formatMaybeNumber(result.prompt_tokens)),
     metricRow("Output tokens (CoT + response)", formatMaybeNumber(result.completion_tokens), "accent"),
     metricRow("Cost (input + output pricing)", formatMaybeYuan(result.cost_yuan)),
     metricRow("Reference answer", correctness.reference_answer || "—", "muted"),
-    metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status))
-  );
+    metricRow("Verifier verdict", correctness.label || "Verifier Unclear", verdictTone(correctness.status)),
+  ];
+  if (result.stop_label) {
+    rows.push(
+      metricRow(
+        "Stop reason",
+        result.stop_warning || result.stop_label,
+        result.truncated || result.possible_repetition ? "warning" : "muted"
+      )
+    );
+  }
+  container.append(...rows);
 }
 
 function verdictTone(status) {
@@ -601,12 +762,19 @@ function updateRunStatus() {
 function finalizeLaneResult(lane, result) {
   const laneNode = laneNodes(lane);
   renderLiveMetrics(laneNode.metrics, result);
-  laneNode.reasoning.textContent =
+  setTraceContent(
+    laneNode.reasoning,
     result.reasoning_text ||
-    (state.activeModel?.showsReasoningTrace
-      ? "(The API did not return a separate chain of thought.)"
-      : "(This model does not return a separate chain of thought.)");
-  laneNode.answer.textContent = result.answer_text || "(No response returned.)";
+      (state.activeModel?.showsReasoningTrace
+        ? "(The API did not return a separate chain of thought.)"
+        : "(This model does not return a separate chain of thought.)"),
+    { highlightHints: laneNode.highlightHints }
+  );
+  setTraceContent(
+    laneNode.answer,
+    result.answer_text || "(No response returned.)",
+    { highlightHints: laneNode.highlightHints }
+  );
   setLaneStreaming(lane, false);
   typesetMath([laneNode.reasoning, laneNode.answer]);
 }
@@ -614,23 +782,27 @@ function finalizeLaneResult(lane, result) {
 function appendLaneDelta(lane, kind, text) {
   const laneNode = laneNodes(lane);
   if (kind === "reasoning") {
-    if (laneNode.reasoning.textContent.startsWith("(")) {
-      laneNode.reasoning.textContent = "";
+    if ((laneNode.reasoning.dataset.rawText || "").startsWith("(")) {
+      setTraceContent(laneNode.reasoning, "", { highlightHints: laneNode.highlightHints });
     }
-    laneNode.reasoning.textContent += text;
+    appendTraceContent(laneNode.reasoning, text, { highlightHints: laneNode.highlightHints });
     return;
   }
-  if (laneNode.answer.textContent.startsWith("(")) {
-    laneNode.answer.textContent = "";
+  if ((laneNode.answer.dataset.rawText || "").startsWith("(")) {
+    setTraceContent(laneNode.answer, "", { highlightHints: laneNode.highlightHints });
   }
-  laneNode.answer.textContent += text;
+  appendTraceContent(laneNode.answer, text, { highlightHints: laneNode.highlightHints });
 }
 
 function seedLaneFallback(lane) {
   const laneNode = laneNodes(lane);
   laneNode.metrics.innerHTML = "";
-  laneNode.reasoning.textContent = "(Stream interrupted. Recovering the full result...)";
-  laneNode.answer.textContent = "(Recovering with a standard request...)";
+  setTraceContent(laneNode.reasoning, "(Stream interrupted. Recovering the full result...)", {
+    highlightHints: laneNode.highlightHints,
+  });
+  setTraceContent(laneNode.answer, "(Recovering with a standard request...)", {
+    highlightHints: laneNode.highlightHints,
+  });
   setLaneStreaming(lane, false);
 }
 
@@ -664,6 +836,17 @@ function handleStreamEvent(eventName, payload) {
   switch (eventName) {
     case "meta":
       state.activeModel = payload.model;
+      if (payload.mode === "custom" && state.customContext) {
+        state.customContext = {
+          ...state.customContext,
+          subtitle: payload.questionSubtitle || state.customContext.subtitle,
+          topic: payload.topic || state.customContext.topic,
+          difficulty: payload.difficulty ?? state.customContext.difficulty,
+          retrieval: payload.retrieval || state.customContext.retrieval,
+          skillText: payload.retrievedSkill || state.customContext.skillText,
+        };
+        renderSelection();
+      }
       seedReasoningPlaceholders();
       updateRunStatus();
       return false;
@@ -779,6 +962,29 @@ function isRetryableStreamError(error) {
   );
 }
 
+function buildRunRequestBody(runId) {
+  if (state.sourceMode === "custom" && state.customContext) {
+    return {
+      modelId: state.modelId,
+      runId,
+      question: state.customContext.question,
+      referenceAnswer: state.customContext.answer,
+      skillText: state.customContext.skillText,
+      skillScore: state.customContext.skillScore,
+      title: state.customContext.title,
+      subtitle: state.customContext.subtitle,
+      topic: state.customContext.topic,
+      difficulty: state.customContext.difficulty,
+    };
+  }
+
+  return {
+    exampleId: state.exampleId,
+    modelId: state.modelId,
+    runId,
+  };
+}
+
 async function openRunStreamResponse(signal, runId) {
   let lastError = new Error("Live stream connection failed.");
 
@@ -796,11 +1002,7 @@ async function openRunStreamResponse(signal, runId) {
         },
         cache: "no-store",
         signal,
-        body: JSON.stringify({
-          exampleId: state.exampleId,
-          modelId: state.modelId,
-          runId,
-        }),
+        body: JSON.stringify(buildRunRequestBody(runId)),
       });
 
       if (!response.ok) {
@@ -838,6 +1040,17 @@ async function openRunStreamResponse(signal, runId) {
 async function runComparison() {
   if (state.running) {
     return;
+  }
+
+  if (state.sourceMode === "custom") {
+    try {
+      if (state.customDirty || !state.customContext) {
+        await prepareCustomProblem();
+      }
+    } catch (error) {
+      nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
+      return;
+    }
   }
 
   clearLiveResults();
@@ -922,12 +1135,23 @@ async function boot() {
   state.payload = await response.json();
   state.exampleId = state.payload.examples[0].id;
   initializeFamilySelections();
+  nodes.customQuestion.value = state.customDraft.question;
+  nodes.customAnswer.value = state.customDraft.answer;
   renderModelSelector();
   renderExamples();
   renderSelection();
   clearLiveResults();
   nodes.runButton.addEventListener("click", runComparison);
   nodes.stopButton.addEventListener("click", stopAndClearRun);
+  nodes.applyCustomButton.addEventListener("click", async () => {
+    try {
+      await prepareCustomProblem();
+    } catch (error) {
+      nodes.customStatus.textContent = error instanceof Error ? error.message : String(error);
+    }
+  });
+  nodes.customQuestion.addEventListener("input", markCustomDirty);
+  nodes.customAnswer.addEventListener("input", markCustomDirty);
   nodes.stopButton.disabled = true;
 }
 

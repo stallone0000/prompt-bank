@@ -48,8 +48,31 @@
 
       <main class="workspace">
         <aside class="sidebar">
+          <section class="custom-panel">
+            <div class="sidebar-head">
+              <h2>Custom Problem</h2>
+            </div>
+            <label class="custom-label" for="customQuestion">Question</label>
+            <textarea
+              id="customQuestion"
+              class="custom-textarea"
+              rows="6"
+              placeholder="Paste your own problem here."
+            ></textarea>
+            <label class="custom-label" for="customAnswer">Reference Answer</label>
+            <textarea
+              id="customAnswer"
+              class="custom-textarea compact"
+              rows="2"
+              placeholder="Required. Used for verifier checking."
+            ></textarea>
+            <button id="applyCustomButton" class="secondary-button" type="button">Retrieve Skill Card</button>
+            <p id="customStatus" class="custom-status">
+              Question and reference answer are both required.
+            </p>
+          </section>
           <div class="sidebar-head">
-            <h2>Problem</h2>
+            <h2>Curated Examples</h2>
           </div>
           <div id="exampleList" class="example-list"></div>
         </aside>

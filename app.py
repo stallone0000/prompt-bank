@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import queue
+import re
 import socket
 import sys
 import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
@@ -56,6 +59,8 @@ TOKEN_USAGE_FIELDS = [
     "usage.completion_tokens",
     "usage.total_tokens",
 ]
+TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+HINT_PATTERN = re.compile(r"\bhints?\b", re.IGNORECASE)
 RETRYABLE_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 RETRYABLE_ERROR_SNIPPETS = (
     "timed out",
@@ -81,6 +86,48 @@ RETRYABLE_HTTP_DETAIL_SNIPPETS = (
     "gateway",
     "forbidden",
 )
+TRS_SOURCE_LABELS = {
+    "doubao_trs": "Doubao TRS Archive",
+    "oss_trs": "GPT-OSS TRS Archive",
+    "gemini_trs": "Gemini TRS Archive",
+}
+RETRIEVAL_STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "into",
+    "about",
+    "find",
+    "show",
+    "prove",
+    "such",
+    "then",
+    "than",
+    "have",
+    "has",
+    "are",
+    "let",
+    "given",
+    "determine",
+    "which",
+    "what",
+    "when",
+    "where",
+    "whose",
+    "value",
+    "values",
+    "equation",
+    "function",
+    "triangle",
+    "integral",
+    "limit",
+    "solve",
+}
+REPETITION_GUARD_REASON = "repetition_guard"
 VERIFY_PROMPT_TEMPLATE = """
 You are a answer checker.
 
@@ -471,6 +518,183 @@ def load_examples_payload() -> Dict[str, Any]:
     return payload
 
 
+def tokenize_retrieval_text(text: str) -> list[str]:
+    tokens = []
+    for token in TOKEN_PATTERN.findall((text or "").lower()):
+        if len(token) <= 1:
+            continue
+        if token in RETRIEVAL_STOPWORDS:
+            continue
+        tokens.append(token)
+    return tokens
+
+
+def source_label_for_key(source_key: str) -> str:
+    return TRS_SOURCE_LABELS.get(source_key, source_key.replace("_", " ").title())
+
+
+def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
+    entries: list[Dict[str, Any]] = []
+    doc_freq: Counter[str] = Counter()
+    seen_pairs: set[tuple[str, str]] = set()
+
+    for source_key, path_str in payload.get("sources", {}).items():
+        if not source_key.endswith("_trs"):
+            continue
+        path = Path(path_str)
+        if not path.exists():
+            continue
+
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                question = (item.get("question") or "").strip()
+                skill_text = (item.get("heuristic_used") or "").strip()
+                if not question or not skill_text:
+                    continue
+
+                dedupe_key = (question, skill_text)
+                if dedupe_key in seen_pairs:
+                    continue
+                seen_pairs.add(dedupe_key)
+
+                token_set = set(tokenize_retrieval_text(question))
+                if not token_set:
+                    continue
+
+                doc_freq.update(token_set)
+                entries.append(
+                    {
+                        "question_id": item.get("question_id") or "",
+                        "question": question,
+                        "answer": (item.get("answer") or "").strip(),
+                        "topic": (item.get("topic") or "").strip(),
+                        "difficulty": item.get("difficulty"),
+                        "skill_text": skill_text,
+                        "skill_score": float(item.get("heuristic_score") or 0.0),
+                        "source_key": source_key,
+                        "source_label": source_label_for_key(source_key),
+                        "token_set": token_set,
+                    }
+                )
+
+    total_docs = len(entries)
+    idf = {
+        token: math.log((1 + total_docs) / (1 + df)) + 1.0
+        for token, df in doc_freq.items()
+    }
+    return {
+        "entries": entries,
+        "idf": idf,
+        "doc_count": total_docs,
+    }
+
+
+def retrieve_skill_entry(question: str, corpus: Dict[str, Any]) -> Dict[str, Any]:
+    query = (question or "").strip()
+    if not query:
+        raise ValueError("Custom mode requires a non-empty question.")
+
+    query_tokens = set(tokenize_retrieval_text(query))
+    if not query_tokens:
+        raise ValueError("The custom question is too short to retrieve a skill card.")
+
+    entries = corpus.get("entries", [])
+    if not entries:
+        raise ValueError("No local TRS skill corpus is available for retrieval.")
+
+    best_entry: Dict[str, Any] | None = None
+    best_score = float("-inf")
+
+    for entry in entries:
+        overlap = query_tokens & entry["token_set"]
+        if not overlap:
+            continue
+
+        lexical_score = sum(corpus["idf"].get(token, 1.0) for token in overlap)
+        coverage = len(overlap) / max(1, len(query_tokens))
+        density = len(overlap) / max(1, len(entry["token_set"]))
+        score = lexical_score * (0.8 + 0.2 * coverage) + density + entry["skill_score"] * 0.004
+        if score > best_score:
+            best_score = score
+            best_entry = entry
+
+    if best_entry is None:
+        best_entry = max(entries, key=lambda item: item["skill_score"])
+        best_score = best_entry["skill_score"] * 0.004
+
+    return {
+        **best_entry,
+        "retrieval_score": round(best_score, 4),
+        "matched_tokens": sorted(query_tokens & best_entry["token_set"]),
+    }
+
+
+def summarize_custom_question(question: str, limit: int = 76) -> str:
+    first_line = next((line.strip() for line in question.splitlines() if line.strip()), "").strip()
+    if not first_line:
+        return "Custom Problem"
+    if len(first_line) <= limit:
+        return first_line
+    return first_line[: limit - 1].rstrip() + "…"
+
+
+def build_custom_example(question: str, reference_answer: str, retrieval: Dict[str, Any]) -> Dict[str, Any]:
+    archived_template = {
+        "direct": {"verification": "UNKNOWN"},
+        "trs": {
+            "verification": "UNKNOWN",
+            "skill_text": retrieval["skill_text"],
+            "skill_score": retrieval["skill_score"],
+        },
+    }
+    return {
+        "id": "custom-problem",
+        "questionId": "",
+        "title": "Custom Problem",
+        "subtitle": (
+            f"Matched to {retrieval['source_label']}"
+            + (f" · {retrieval['topic']}" if retrieval.get("topic") else "")
+        ),
+        "highlight": "Skill card retrieved from the local TRS archive using lexical overlap.",
+        "question": question.strip(),
+        "answer": reference_answer.strip(),
+        "topic": "Custom Input",
+        "difficulty": "User",
+        "archived": {
+            model_id: deepcopy(archived_template)
+            for model_id in MODEL_CONFIGS
+        },
+        "retrieval": {
+            "sourceLabel": retrieval["source_label"],
+            "matchedQuestion": retrieval["question"],
+            "matchedTopic": retrieval.get("topic") or "",
+            "matchedDifficulty": retrieval.get("difficulty"),
+            "matchedTokens": retrieval.get("matched_tokens") or [],
+            "score": retrieval["retrieval_score"],
+        },
+        "customTitle": summarize_custom_question(question),
+    }
+
+
+def serialize_custom_preview(example: Dict[str, Any]) -> Dict[str, Any]:
+    first_archived = next(iter(example["archived"].values()))
+    return {
+        "id": example["id"],
+        "title": example["customTitle"],
+        "subtitle": example["subtitle"],
+        "question": example["question"],
+        "answer": example["answer"],
+        "topic": example["topic"],
+        "difficulty": example["difficulty"],
+        "skillText": first_archived["trs"]["skill_text"],
+        "skillScore": first_archived["trs"]["skill_score"],
+        "retrieval": example["retrieval"],
+    }
+
+
 def compute_cost_yuan(prompt_tokens: int, completion_tokens: int, config: ModelConfig) -> float:
     return (
         prompt_tokens / 1_000_000 * config.input_price_yuan_per_million
@@ -555,6 +779,29 @@ def parse_usage_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def merge_usage(existing: Dict[str, Any], incoming: Dict[str, Any] | None) -> Dict[str, Any]:
+    if not incoming:
+        return existing
+
+    merged = dict(existing)
+    for key, value in incoming.items():
+        if isinstance(value, dict):
+            merged[key] = merge_usage(merged.get(key, {}) if isinstance(merged.get(key), dict) else {}, value)
+            continue
+
+        if key.endswith("_tokens") or key in {"prompt_tokens", "completion_tokens", "total_tokens"}:
+            current = parse_usage_int(merged.get(key))
+            candidate = parse_usage_int(value)
+            if candidate is None:
+                continue
+            merged[key] = candidate if current is None else max(current, candidate)
+            continue
+
+        if value not in (None, ""):
+            merged[key] = value
+    return merged
 
 
 def parse_verifier_verdict(content: str) -> str:
@@ -709,6 +956,66 @@ def verify_answer(question_text: str, reference_answer: str, candidate_answer: s
     }
 
 
+def normalize_repetition_text(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip().lower())
+
+
+def detect_repetition_loop(text: str) -> bool:
+    normalized = normalize_repetition_text(text)
+    if len(normalized) < 180:
+        return False
+
+    for width in (36, 48, 64, 80, 96):
+        if len(normalized) < width * 3:
+            continue
+        tail = normalized[-width:]
+        if tail * 3 == normalized[-width * 3 :]:
+            return True
+
+    lines = [line.strip().lower() for line in text.splitlines() if line.strip()]
+    if len(lines) >= 3 and len(lines[-1]) >= 18 and lines[-1] == lines[-2] == lines[-3]:
+        return True
+    return False
+
+
+def summarize_stop_reason(finish_reason: str | None, combined_text: str) -> Dict[str, Any]:
+    repeated = detect_repetition_loop(combined_text)
+    if finish_reason == REPETITION_GUARD_REASON:
+        return {
+            "finish_reason": finish_reason,
+            "stop_label": "Repetition Guard",
+            "stop_warning": "Detected a repetition loop and stopped early.",
+            "truncated": True,
+            "possible_repetition": True,
+        }
+    if finish_reason == "length":
+        return {
+            "finish_reason": finish_reason,
+            "stop_label": "Max Length Reached",
+            "stop_warning": (
+                "Output hit the max-length cap and may be incomplete."
+                + (" Possible repetition loop detected." if repeated else "")
+            ),
+            "truncated": True,
+            "possible_repetition": repeated,
+        }
+    if repeated:
+        return {
+            "finish_reason": finish_reason,
+            "stop_label": "Possible Repetition",
+            "stop_warning": "The ending looks repetitive. Check whether the answer was cut off.",
+            "truncated": False,
+            "possible_repetition": True,
+        }
+    return {
+        "finish_reason": finish_reason,
+        "stop_label": None,
+        "stop_warning": "",
+        "truncated": False,
+        "possible_repetition": False,
+    }
+
+
 def build_result(
     question_text: str,
     config: ModelConfig,
@@ -716,6 +1023,7 @@ def build_result(
     answer_text: str,
     usage: Dict[str, Any],
     reference_answer: str,
+    finish_reason: str | None,
 ) -> Dict[str, Any]:
     prompt_tokens = parse_usage_int(usage.get("prompt_tokens"))
     completion_tokens = parse_usage_int(usage.get("completion_tokens"))
@@ -725,6 +1033,7 @@ def build_result(
         cost_yuan = round(compute_cost_yuan(prompt_tokens, completion_tokens, config), 6)
 
     correctness = verify_answer(question_text, reference_answer, answer_text)
+    stop_info = summarize_stop_reason(finish_reason, "\n".join([reasoning_text or "", answer_text or ""]))
 
     return {
         "reasoning_text": reasoning_text or "",
@@ -734,6 +1043,11 @@ def build_result(
         "total_tokens": total_tokens,
         "cost_yuan": cost_yuan,
         "correctness": correctness,
+        "finish_reason": stop_info["finish_reason"],
+        "stop_label": stop_info["stop_label"],
+        "stop_warning": stop_info["stop_warning"],
+        "truncated": stop_info["truncated"],
+        "possible_repetition": stop_info["possible_repetition"],
     }
 
 
@@ -808,7 +1122,8 @@ def call_model(question_text: str, prompt_text: str, config: ModelConfig, refere
         raise RuntimeError(f"Upstream API request failed after {max_retries} attempts: {last_error}")
 
     choices = parsed.get("choices", [])
-    message = choices[0].get("message", {}) if choices else {}
+    choice = choices[0] if choices else {}
+    message = choice.get("message", {})
     usage = parsed.get("usage", {}) or {}
     return build_result(
         question_text=question_text,
@@ -817,6 +1132,7 @@ def call_model(question_text: str, prompt_text: str, config: ModelConfig, refere
         answer_text=extract_answer_text(message),
         usage=usage,
         reference_answer=reference_answer,
+        finish_reason=choice.get("finish_reason"),
     )
 
 
@@ -838,6 +1154,7 @@ def stream_model(
         reasoning_parts: list[str] = []
         answer_parts: list[str] = []
         usage: Dict[str, Any] = {}
+        finish_reason: str | None = None
 
         try:
             with opener.open(make_api_request(prompt_text, config, stream=True), timeout=timeout_seconds) as response:
@@ -852,9 +1169,11 @@ def stream_model(
                         continue
                     chunk = json.loads(data)
                     if chunk.get("usage"):
-                        usage = chunk["usage"]
+                        usage = merge_usage(usage, chunk["usage"])
                     choices = chunk.get("choices", [])
-                    delta = choices[0].get("delta", {}) if choices else {}
+                    choice = choices[0] if choices else {}
+                    finish_reason = choice.get("finish_reason") or finish_reason
+                    delta = choice.get("delta", {})
                     reasoning_piece = extract_reasoning_text(delta)
                     answer_piece = extract_answer_text(delta)
                     if reasoning_piece:
@@ -863,6 +1182,10 @@ def stream_model(
                     if answer_piece:
                         answer_parts.append(answer_piece)
                         on_delta("answer", answer_piece)
+                    combined_text = "\n".join(["".join(reasoning_parts), "".join(answer_parts)])
+                    if detect_repetition_loop(combined_text):
+                        finish_reason = REPETITION_GUARD_REASON
+                        break
 
             return build_result(
                 question_text=question_text,
@@ -871,6 +1194,7 @@ def stream_model(
                 answer_text="".join(answer_parts),
                 usage=usage,
                 reference_answer=reference_answer,
+                finish_reason=finish_reason,
             )
         except Exception as exc:
             last_error = format_upstream_error(exc)
@@ -967,13 +1291,41 @@ class DemoHandler(SimpleHTTPRequestHandler):
             self.path = "/index.html"
         return super().do_GET()
 
+    def _build_custom_preview(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        question = (payload.get("question") or "").strip()
+        reference_answer = (payload.get("referenceAnswer") or payload.get("answer") or "").strip()
+        if not question:
+            raise ValueError("Custom mode requires a question.")
+        if not reference_answer:
+            raise ValueError("Custom mode requires a reference answer.")
+        retrieval = retrieve_skill_entry(question, self.server.skill_corpus)
+        return build_custom_example(question, reference_answer, retrieval)
+
     def _resolve_request(self, payload: Dict[str, Any]) -> tuple[Dict[str, Any], ModelConfig]:
-        example_id = payload.get("exampleId", "")
         model_id = payload.get("modelId", "")
 
         if model_id not in MODEL_CONFIGS:
             raise ValueError(f"Unsupported modelId: {model_id}")
 
+        if payload.get("question") or payload.get("referenceAnswer") or payload.get("answer"):
+            skill_text = (payload.get("skillText") or "").strip()
+            skill_score = payload.get("skillScore")
+            custom_preview = self._build_custom_preview(payload)
+            if skill_text:
+                for archived in custom_preview["archived"].values():
+                    archived["trs"]["skill_text"] = skill_text
+                    archived["trs"]["skill_score"] = float(skill_score or 0.0)
+            if payload.get("title"):
+                custom_preview["title"] = str(payload["title"])
+            if payload.get("subtitle"):
+                custom_preview["subtitle"] = str(payload["subtitle"])
+            if payload.get("topic"):
+                custom_preview["topic"] = str(payload["topic"])
+            if payload.get("difficulty"):
+                custom_preview["difficulty"] = payload["difficulty"]
+            return custom_preview, MODEL_CONFIGS[model_id]
+
+        example_id = payload.get("exampleId", "")
         example = self.server.examples_by_id.get(example_id)
         if not example:
             raise ValueError(f"Unknown exampleId: {example_id}")
@@ -996,6 +1348,13 @@ class DemoHandler(SimpleHTTPRequestHandler):
             {
                 "exampleId": example["id"],
                 "runId": run_id,
+                "mode": "custom" if example["id"] == "custom-problem" else "example",
+                "questionTitle": example.get("title") or "",
+                "questionSubtitle": example.get("subtitle") or "",
+                "topic": example.get("topic") or "",
+                "difficulty": example.get("difficulty"),
+                "retrieval": example.get("retrieval") or None,
+                "retrievedSkill": skill_text,
                 "model": model_payload(config),
                 "referenceAnswer": reference_answer,
             },
@@ -1092,6 +1451,12 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
         try:
             payload = self._read_json_body()
+
+            if parsed.path == "/api/retrieve_skill":
+                preview = self._build_custom_preview(payload)
+                self._send_json({"ok": True, "custom": serialize_custom_preview(preview)})
+                return
+
             example, config = self._resolve_request(payload)
             run_id = payload.get("runId")
 
@@ -1101,6 +1466,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
                     {
                         "ok": True,
                         "exampleId": example["id"],
+                        "mode": "custom" if example["id"] == "custom-problem" else "example",
                         "live": live,
                     }
                 )
@@ -1123,6 +1489,7 @@ class DemoServer(ThreadingHTTPServer):
         payload = load_examples_payload()
         self.examples_payload = payload
         self.examples_by_id = {example["id"]: example for example in payload["examples"]}
+        self.skill_corpus = build_skill_corpus(payload)
 
 
 def main() -> None:
