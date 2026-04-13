@@ -602,42 +602,48 @@ a {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  line-height: 1;
   color: var(--muted);
 }
 
 .model-picker-shell {
   min-width: 0;
   display: grid;
-  gap: 1px;
+  gap: 0;
 }
 
 .picker-copy {
-  display: grid;
-  gap: 0;
-  align-content: start;
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .picker-head {
-  display: block;
-  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 1px;
 }
 
 .picker-tools {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
-  flex: none;
-  flex-wrap: wrap;
-  margin-bottom: 1px;
+  gap: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
 }
 
 .picker-note {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   width: fit-content;
+  height: 31px;
   margin-top: 0;
-  padding: 4px 8px;
+  padding: 0 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--panel-soft);
@@ -650,6 +656,7 @@ a {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
   gap: 3px;
+  margin-top: 0;
 }
 
 .model-group-card {
@@ -755,7 +762,9 @@ a {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  width: 100%;
 }
 
 .verifier-card {
@@ -788,12 +797,12 @@ a {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 210px;
+  max-width: 180px;
 }
 
 .verifier-select {
   width: auto;
-  min-width: 152px;
+  min-width: 140px;
   margin-top: 0;
   padding: 6px 28px 6px 10px;
   border: 1px solid #d8d1c8;
@@ -950,22 +959,14 @@ a {
   line-height: 1;
 }
 
-.skill-panel-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  line-height: 1;
-}
-
 .skill-card {
   margin: 0;
   padding: 0 14px 14px;
   border: 0;
   border-radius: 0;
   background: transparent;
-  font-size: 0.84rem;
-  line-height: 1.58;
+  font-size: 0.79rem;
+  line-height: 1.54;
 }
 
 .comparison-panel {
@@ -1144,21 +1145,18 @@ a {
 }
 
 .trace-panel summary {
-  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 9px 14px;
   cursor: pointer;
   font-weight: 600;
+  line-height: 1;
 }
 
 .skill-panel.trace-panel {
   margin-top: 0;
-}
-
-.skill-panel.trace-panel summary {
-  display: flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 9px 14px;
-  line-height: 1;
 }
 
 .trace-panel pre {
