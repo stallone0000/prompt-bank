@@ -393,6 +393,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=4.2,
         output_price_yuan_per_million=16.8,
         supports_reasoning_trace=True,
+        prefer_standard_request=True,
     ),
     "minimax27hs": ModelConfig(
         model_id="minimax27hs",
@@ -405,6 +406,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         input_price_yuan_per_million=4.2,
         output_price_yuan_per_million=16.8,
         supports_reasoning_trace=True,
+        prefer_standard_request=True,
     ),
     "kimi25": ModelConfig(
         model_id="kimi25",
