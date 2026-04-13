@@ -1,7 +1,8 @@
 const state = {
   payload: null,
   modelId: "doubao",
-  companySelections: {},
+  selectedFamilyId: null,
+  familySelections: {},
   exampleId: null,
   running: false,
   activeModel: null,
@@ -22,7 +23,8 @@ const RUN_RESTART_MAX_RETRIES = 2;
 
 const nodes = {
   exampleList: document.getElementById("exampleList"),
-  companyPickerGrid: document.getElementById("companyPickerGrid"),
+  modelCount: document.getElementById("modelCount"),
+  modelGroupGrid: document.getElementById("modelGroupGrid"),
   runButton: document.getElementById("runButton"),
   topicBadge: document.getElementById("topicBadge"),
   difficultyBadge: document.getElementById("difficultyBadge"),
@@ -43,34 +45,75 @@ const nodes = {
   template: document.getElementById("exampleCardTemplate"),
 };
 
-const COMPANY_META = {
-  "ByteDance / Doubao": {
-    logoPath: "/assets/company-logos/doubao.png",
-    logoAlt: "Doubao model logo",
+const FAMILY_ORDER = [
+  "doubao",
+  "gptoss",
+  "gpt",
+  "glm",
+  "qwen",
+  "claude",
+  "grok",
+  "gemini",
+  "minimax",
+  "deepseek",
+  "kimi",
+];
+
+const FAMILY_META = {
+  doubao: {
+    label: "Doubao",
+    short: "DB",
+    icon: "/icon/doubao-color.svg",
   },
-  "Alibaba / Qwen": {
-    logoPath: "/assets/company-logos/qwen.png",
-    logoAlt: "Qwen model logo",
+  gptoss: {
+    label: "GPT-OSS",
+    short: "OSS",
+    icon: "/icon/openai.svg",
   },
-  "Z.AI / GLM": {
-    logoPath: "/assets/company-logos/glm-zhipu.png",
-    logoAlt: "GLM model logo",
+  gpt: {
+    label: "GPT",
+    short: "GPT",
+    icon: "/icon/openai.svg",
   },
-  MiniMax: {
-    logoPath: "/assets/company-logos/minimax.png",
-    logoAlt: "MiniMax model logo",
+  glm: {
+    label: "GLM",
+    short: "GLM",
+    icon: "/icon/zai.svg",
   },
-  "Moonshot / Kimi": {
-    logoPath: "/assets/company-logos/kimi.png",
-    logoAlt: "Kimi model logo",
+  qwen: {
+    label: "Qwen",
+    short: "QW",
+    icon: "/icon/qwen-color.svg",
   },
-  "Qiniu / GPT-OSS": {
-    logoPath: "/assets/company-logos/qiniu.jpg",
-    logoAlt: "Qiniu logo",
+  claude: {
+    label: "Claude",
+    short: "CD",
+    icon: "/icon/claude-color.svg",
   },
-  "Google / Gemini": {
-    logoPath: "/assets/company-logos/google-ai.svg",
-    logoAlt: "Google AI logo",
+  grok: {
+    label: "Grok",
+    short: "GR",
+    icon: "/icon/grok.svg",
+  },
+  gemini: {
+    label: "Gemini",
+    short: "GM",
+    icon: "/icon/gemini-color.svg",
+  },
+  minimax: {
+    label: "MiniMax",
+    short: "MX",
+    icon: "/icon/minimax-color.svg",
+  },
+  deepseek: {
+    label: "DeepSeek",
+    short: "DS",
+    icon: "/icon/deepseek-color.svg",
+  },
+  kimi: {
+    label: "Kimi",
+    short: "KM",
+    icon: null,
   },
 };
 
@@ -110,96 +153,264 @@ function typesetMath(targets = []) {
   window.MathJax.typesetPromise(targets).catch(() => {});
 }
 
-function groupedModels() {
-  const groups = new Map();
-  Object.entries(state.payload.models).forEach(([modelId, model]) => {
-    const company = model.company || "Other";
-    if (!groups.has(company)) {
-      groups.set(company, []);
-    }
-    groups.get(company).push([modelId, model]);
-  });
-  return groups;
+function normalizeLookupValue(value) {
+  return String(value || "").toLowerCase();
 }
 
-function initializeCompanySelections() {
-  const activeModel = state.payload.models[state.modelId] ? state.modelId : Object.keys(state.payload.models)[0];
-  const activeCompany = state.payload.models[activeModel]?.company;
-  state.companySelections = {};
-  groupedModels().forEach((entries, company) => {
-    const defaultModel = entries.some(([modelId]) => modelId === activeModel) && company === activeCompany
-      ? activeModel
-      : entries[0][0];
-    state.companySelections[company] = defaultModel;
+function inferFamilyId(modelId, model) {
+  const family = normalizeLookupValue(model?.family);
+  if (family === "gpt-oss") {
+    return "gptoss";
+  }
+  if (family === "doubao") {
+    return "doubao";
+  }
+  if (family === "deepseek") {
+    return "deepseek";
+  }
+  if (family === "minimax") {
+    return "minimax";
+  }
+  if (family === "claude") {
+    return "claude";
+  }
+  if (family === "grok") {
+    return "grok";
+  }
+  if (family === "gemini") {
+    return "gemini";
+  }
+  if (family === "qwen") {
+    return "qwen";
+  }
+  if (family === "glm") {
+    return "glm";
+  }
+  if (family === "kimi") {
+    return "kimi";
+  }
+  if (family === "gpt") {
+    return "gpt";
+  }
+
+  const haystack = normalizeLookupValue(
+    [model?.family, modelId, model?.label, model?.apiModel, model?.company].join(" ")
+  );
+  if (haystack.includes("gpt-oss")) {
+    return "gptoss";
+  }
+  if (haystack.includes("doubao")) {
+    return "doubao";
+  }
+  if (haystack.includes("deepseek")) {
+    return "deepseek";
+  }
+  if (haystack.includes("minimax")) {
+    return "minimax";
+  }
+  if (haystack.includes("claude")) {
+    return "claude";
+  }
+  if (haystack.includes("grok")) {
+    return "grok";
+  }
+  if (haystack.includes("gemini")) {
+    return "gemini";
+  }
+  if (haystack.includes("qwen")) {
+    return "qwen";
+  }
+  if (haystack.includes("glm") || haystack.includes("z-ai") || haystack.includes("z.ai")) {
+    return "glm";
+  }
+  if (haystack.includes("kimi")) {
+    return "kimi";
+  }
+  if (haystack.includes("gpt-5") || haystack.includes("/gpt") || haystack.includes("openai")) {
+    return "gpt";
+  }
+  return "other";
+}
+
+function groupedFamilies() {
+  const groups = new Map();
+  Object.entries(state.payload.models).forEach(([modelId, model]) => {
+    const family = inferFamilyId(modelId, model);
+    if (!groups.has(family)) {
+      groups.set(family, []);
+    }
+    groups.get(family).push([modelId, model]);
   });
+
+  const ordered = new Map();
+  FAMILY_ORDER.forEach((family) => {
+    if (groups.has(family)) {
+      ordered.set(family, groups.get(family));
+    }
+  });
+
+  Array.from(groups.keys())
+    .filter((family) => !ordered.has(family))
+    .sort((a, b) => a.localeCompare(b))
+    .forEach((family) => {
+      ordered.set(family, groups.get(family));
+    });
+
+  ordered.forEach((entries, family) => {
+    entries.sort((a, b) => a[1].label.localeCompare(b[1].label));
+    ordered.set(family, entries);
+  });
+
+  return ordered;
+}
+
+function familyMeta(familyId) {
+  const id = familyId || "other";
+  return FAMILY_META[id] || {
+    label: id.toUpperCase(),
+    short: id.slice(0, 2).toUpperCase(),
+    icon: null,
+  };
+}
+
+function familyProviderLabel(entries, activeModelId) {
+  const selectedModel = entries.find(([modelId]) => modelId === activeModelId)?.[1] || entries[0]?.[1];
+  return selectedModel?.provider || selectedModel?.company || "Model family";
+}
+
+function familyCountLabel(entries) {
+  return `${entries.length} model${entries.length > 1 ? "s" : ""}`;
+}
+
+function initializeFamilySelections() {
+  const models = state.payload.models;
+  const activeModel = models[state.modelId] ? state.modelId : Object.keys(models)[0];
+  const activeFamily = inferFamilyId(activeModel, models[activeModel]);
+  state.selectedFamilyId = activeFamily;
+  state.familySelections = {};
+
+  groupedFamilies().forEach((entries, family) => {
+    const defaultModel =
+      family === activeFamily && entries.some(([modelId]) => modelId === activeModel)
+        ? activeModel
+        : entries[0][0];
+    state.familySelections[family] = defaultModel;
+  });
+
   state.modelId = activeModel;
 }
 
-function ensureCompanySelections() {
-  if (!Object.keys(state.companySelections).length) {
-    initializeCompanySelections();
+function ensureFamilySelections() {
+  if (!Object.keys(state.familySelections).length) {
+    initializeFamilySelections();
   }
-  groupedModels().forEach((entries, company) => {
-    const current = state.companySelections[company];
+
+  groupedFamilies().forEach((entries, family) => {
+    const current = state.familySelections[family];
     if (!entries.some(([modelId]) => modelId === current)) {
-      state.companySelections[company] = entries[0][0];
+      state.familySelections[family] = entries[0][0];
     }
   });
+
+  if (!groupedFamilies().has(state.selectedFamilyId)) {
+    state.selectedFamilyId = groupedFamilies().keys().next().value || null;
+  }
 }
 
-function renderModels() {
-  ensureCompanySelections();
-  const activeCompany = state.payload.models[state.modelId]?.company;
-  nodes.companyPickerGrid.innerHTML = "";
+function renderFamilyIcon(meta) {
+  if (meta.icon) {
+    const img = document.createElement("img");
+    img.className = "model-group-icon";
+    img.src = meta.icon;
+    img.alt = `${meta.label} icon`;
+    return img;
+  }
 
-  groupedModels().forEach((entries, company) => {
-    const meta = COMPANY_META[company] || {};
+  const fallback = document.createElement("span");
+  fallback.className = "model-group-fallback";
+  fallback.textContent = meta.short;
+  return fallback;
+}
+
+function renderModelSelector() {
+  ensureFamilySelections();
+  const families = groupedFamilies();
+  const activeFamily = families.has(state.selectedFamilyId)
+    ? state.selectedFamilyId
+    : families.keys().next().value;
+  state.selectedFamilyId = activeFamily;
+  nodes.modelGroupGrid.innerHTML = "";
+  nodes.modelCount.textContent = `${Object.keys(state.payload.models).length} available`;
+
+  families.forEach((entries, family) => {
+    const meta = familyMeta(family);
+    const selectedModelId = state.familySelections[family] || entries[0][0];
+    state.familySelections[family] = selectedModelId;
+
     const card = document.createElement("article");
-    card.className = company === activeCompany ? "company-card active" : "company-card";
+    card.className = family === activeFamily ? "model-group-card active" : "model-group-card";
+
+    const head = document.createElement("div");
+    head.className = "model-group-head";
 
     const brand = document.createElement("div");
-    brand.className = "company-brand";
-
-    if (meta.logoPath) {
-      const logo = document.createElement("img");
-      logo.className = "company-logo";
-      logo.src = meta.logoPath;
-      logo.alt = meta.logoAlt || `${company} logo`;
-      brand.appendChild(logo);
-    }
+    brand.className = "model-group-brand";
+    brand.appendChild(renderFamilyIcon(meta));
 
     const copy = document.createElement("div");
-    copy.className = "company-copy";
-    const label = document.createElement("span");
-    label.className = "company-name";
-    label.textContent = company;
-    const metaLine = document.createElement("strong");
-    metaLine.className = "company-count";
-    metaLine.textContent = `${entries.length} model${entries.length > 1 ? "s" : ""}`;
-    copy.append(label, metaLine);
-    brand.appendChild(copy);
+    copy.className = "model-group-copy";
+    const title = document.createElement("strong");
+    title.textContent = meta.label;
+    const subtitle = document.createElement("span");
+    subtitle.textContent = familyProviderLabel(entries, selectedModelId);
+    copy.append(title, subtitle);
+
+    const count = document.createElement("span");
+    count.className = "model-group-count";
+    count.textContent = familyCountLabel(entries);
+
+    head.append(brand, copy, count);
+
+    const label = document.createElement("label");
+    label.className = "sr-only";
+    label.setAttribute("for", `model-select-${family}`);
+    label.textContent = `Select ${meta.label} model`;
 
     const select = document.createElement("select");
-    select.className = "company-select";
-    select.dataset.company = company;
+    select.id = `model-select-${family}`;
+    select.className = "model-group-select";
+
     entries.forEach(([modelId, model]) => {
       const option = document.createElement("option");
       option.value = modelId;
       option.textContent = model.label;
       select.appendChild(option);
     });
-    select.value = state.companySelections[company];
+
+    select.value = selectedModelId;
     select.addEventListener("change", (event) => {
-      state.companySelections[company] = event.target.value;
-      state.modelId = event.target.value;
-      renderModels();
+      const modelId = event.target.value;
+      state.selectedFamilyId = family;
+      state.familySelections[family] = modelId;
+      state.modelId = modelId;
+      renderModelSelector();
       renderSelection();
       clearLiveResults();
     });
 
-    card.append(brand, select);
-    nodes.companyPickerGrid.appendChild(card);
+    const metaLine = document.createElement("div");
+    metaLine.className = "model-group-meta";
+    const metaLabel = document.createElement("span");
+    metaLabel.textContent = "Active model";
+    const metaValue = document.createElement("strong");
+    metaValue.textContent = state.payload.models[selectedModelId].label;
+    metaLine.append(metaLabel, metaValue);
+
+    card.append(head, label, select, metaLine);
+    nodes.modelGroupGrid.appendChild(card);
   });
+
+  state.modelId = state.familySelections[activeFamily];
 }
 
 function renderExamples() {
@@ -641,8 +852,8 @@ async function boot() {
   const response = await fetch("/api/examples");
   state.payload = await response.json();
   state.exampleId = state.payload.examples[0].id;
-  initializeCompanySelections();
-  renderModels();
+  initializeFamilySelections();
+  renderModelSelector();
   renderExamples();
   renderSelection();
   clearLiveResults();

@@ -56,9 +56,15 @@
 
         <section class="stage">
           <div class="control-bar">
-            <div class="company-picker-shell">
-              <span class="field-label">Model Families</span>
-              <div id="companyPickerGrid" class="company-picker-grid"></div>
+            <div class="model-picker-shell">
+              <div class="picker-head">
+                <div class="picker-copy">
+                  <span class="field-label">Model Families</span>
+                  <p>Each family keeps its own selected model. Changing a dropdown activates that family.</p>
+                </div>
+                <span id="modelCount" class="picker-note">-</span>
+              </div>
+              <div id="modelGroupGrid" class="model-group-grid"></div>
             </div>
             <div class="control-actions">
               <div class="verifier-card">

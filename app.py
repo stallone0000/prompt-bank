@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -83,6 +84,8 @@ Candidate model answer:
 class ModelConfig:
     model_id: str
     company: str
+    provider: str
+    family: str
     label: str
     api_model: str
     prompt_template: str
@@ -90,12 +93,17 @@ class ModelConfig:
     output_price_yuan_per_million: float | None
     supports_reasoning_trace: bool
     max_tokens: int = 32000
+    max_tokens_param: str = "max_tokens"
+    temperature_override: float | None = None
+    extra_body: Dict[str, Any] | None = None
 
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "doubao": ModelConfig(
         model_id="doubao",
-        company="ByteDance / Doubao",
+        company="Doubao",
+        provider="ByteDance",
+        family="Doubao",
         label="Doubao Seed 1.8",
         api_model="volcengine/doubao-seed-1-8",
         prompt_template=PROMPT_SHORT,
@@ -105,7 +113,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "doubao2pro": ModelConfig(
         model_id="doubao2pro",
-        company="ByteDance / Doubao",
+        company="Doubao",
+        provider="ByteDance",
+        family="Doubao",
         label="Doubao Seed 2.0 Pro",
         api_model="volcengine/doubao-seed-2-0-pro",
         prompt_template=PROMPT_SHORT,
@@ -115,7 +125,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "oss": ModelConfig(
         model_id="oss",
-        company="Qiniu / GPT-OSS",
+        company="GPT-OSS",
+        provider="Qiniu",
+        family="GPT-OSS",
         label="GPT-OSS-120B",
         api_model="qiniu/gpt-oss-120b",
         prompt_template=PROMPT_COD,
@@ -125,7 +137,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "oss20": ModelConfig(
         model_id="oss20",
-        company="Qiniu / GPT-OSS",
+        company="GPT-OSS",
+        provider="Qiniu",
+        family="GPT-OSS",
         label="GPT-OSS-20B",
         api_model="qiniu/gpt-oss-20b",
         prompt_template=PROMPT_COD,
@@ -135,7 +149,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "gemini": ModelConfig(
         model_id="gemini",
-        company="Google / Gemini",
+        company="Gemini",
+        provider="CloudSway",
+        family="Gemini",
         label="Gemini 3 Flash",
         api_model="cloudsway/gemini-3-flash-preview",
         prompt_template=PROMPT_TRYTO,
@@ -145,7 +161,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "qwen35plus": ModelConfig(
         model_id="qwen35plus",
-        company="Alibaba / Qwen",
+        company="Qwen",
+        provider="Alibaba",
+        family="Qwen",
         label="Qwen 3.5 Plus",
         api_model="alibaba/qwen3.5-plus",
         prompt_template=PROMPT_SHORT,
@@ -155,7 +173,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "qwen35flash": ModelConfig(
         model_id="qwen35flash",
-        company="Alibaba / Qwen",
+        company="Qwen",
+        provider="Alibaba",
+        family="Qwen",
         label="Qwen 3.5 Flash",
         api_model="alibaba/qwen3.5-flash",
         prompt_template=PROMPT_SHORT,
@@ -165,7 +185,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "qwen36plus": ModelConfig(
         model_id="qwen36plus",
-        company="Alibaba / Qwen",
+        company="Qwen",
+        provider="Qwen",
+        family="Qwen",
         label="Qwen 3.6 Plus",
         api_model="qwen/qwen3.6-plus",
         prompt_template=PROMPT_SHORT,
@@ -175,7 +197,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "glm5": ModelConfig(
         model_id="glm5",
-        company="Z.AI / GLM",
+        company="GLM",
+        provider="Z.AI",
+        family="GLM",
         label="GLM-5",
         api_model="z-ai/glm-5",
         prompt_template=PROMPT_SHORT,
@@ -185,7 +209,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "glm51": ModelConfig(
         model_id="glm51",
-        company="Z.AI / GLM",
+        company="GLM",
+        provider="Z.AI",
+        family="GLM",
         label="GLM-5.1",
         api_model="z-ai/glm-5.1",
         prompt_template=PROMPT_SHORT,
@@ -196,6 +222,8 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "minimax25hs": ModelConfig(
         model_id="minimax25hs",
         company="MiniMax",
+        provider="MiniMax",
+        family="MiniMax",
         label="MiniMax M2.5 Highspeed",
         api_model="minimax/MiniMax-M2.5-highspeed",
         prompt_template=PROMPT_SHORT,
@@ -206,6 +234,8 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "minimax27hs": ModelConfig(
         model_id="minimax27hs",
         company="MiniMax",
+        provider="MiniMax",
+        family="MiniMax",
         label="MiniMax M2.7 Highspeed",
         api_model="minimax/MiniMax-M2.7-highspeed",
         prompt_template=PROMPT_SHORT,
@@ -215,7 +245,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     ),
     "kimi25": ModelConfig(
         model_id="kimi25",
-        company="Moonshot / Kimi",
+        company="Kimi",
+        provider="Moonshot via Qiniu",
+        family="Kimi",
         label="Kimi K2.5",
         api_model="qiniu/kimi-k2.5",
         prompt_template=PROMPT_SHORT,
@@ -223,7 +255,152 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         output_price_yuan_per_million=14.7,
         supports_reasoning_trace=True,
     ),
+    "gpt54": ModelConfig(
+        model_id="gpt54",
+        company="GPT",
+        provider="OpenAI via Qiniu",
+        family="GPT",
+        label="GPT-5.4",
+        api_model="qiniu/openai/gpt-5.4",
+        prompt_template=PROMPT_TRYTO,
+        input_price_yuan_per_million=18.25,
+        output_price_yuan_per_million=109.5,
+        supports_reasoning_trace=False,
+        max_tokens_param="max_completion_tokens",
+        temperature_override=1.0,
+    ),
+    "gpt52": ModelConfig(
+        model_id="gpt52",
+        company="GPT",
+        provider="Microsoft / OpenAI",
+        family="GPT",
+        label="GPT-5.2",
+        api_model="microsoft/openai/gpt-5.2",
+        prompt_template=PROMPT_TRYTO,
+        input_price_yuan_per_million=12.6,
+        output_price_yuan_per_million=100.8,
+        supports_reasoning_trace=False,
+        max_tokens_param="max_completion_tokens",
+        temperature_override=1.0,
+    ),
+    "claudeopus46": ModelConfig(
+        model_id="claudeopus46",
+        company="Claude",
+        provider="Anthropic",
+        family="Claude",
+        label="Claude Opus 4.6",
+        api_model="anthropic/claude-opus-4.6",
+        prompt_template=PROMPT_TRYTO,
+        input_price_yuan_per_million=36.5,
+        output_price_yuan_per_million=273.75,
+        supports_reasoning_trace=False,
+    ),
+    "claudesonnet46": ModelConfig(
+        model_id="claudesonnet46",
+        company="Claude",
+        provider="Anthropic",
+        family="Claude",
+        label="Claude Sonnet 4.6",
+        api_model="anthropic/claude-sonnet-4-6",
+        prompt_template=PROMPT_TRYTO,
+        input_price_yuan_per_million=18.576,
+        output_price_yuan_per_million=92.88,
+        supports_reasoning_trace=False,
+    ),
+    "claudehaiku45": ModelConfig(
+        model_id="claudehaiku45",
+        company="Claude",
+        provider="Anthropic",
+        family="Claude",
+        label="Claude Haiku 4.5",
+        api_model="anthropic/claude-haiku-4.5",
+        prompt_template=PROMPT_TRYTO,
+        input_price_yuan_per_million=7.2,
+        output_price_yuan_per_million=36.0,
+        supports_reasoning_trace=False,
+    ),
+    "grok4": ModelConfig(
+        model_id="grok4",
+        company="Grok",
+        provider="xAI",
+        family="Grok",
+        label="Grok-4",
+        api_model="xai/grok-4",
+        prompt_template=PROMPT_TRYTO,
+        input_price_yuan_per_million=22.0,
+        output_price_yuan_per_million=110.0,
+        supports_reasoning_trace=False,
+    ),
+    "grok4fast": ModelConfig(
+        model_id="grok4fast",
+        company="Grok",
+        provider="Qiniu",
+        family="Grok",
+        label="Grok-4 Fast",
+        api_model="qiniu/grok-4-fast",
+        prompt_template=PROMPT_TRYTO,
+        input_price_yuan_per_million=2.88,
+        output_price_yuan_per_million=7.2,
+        supports_reasoning_trace=False,
+    ),
+    "gemini31pro": ModelConfig(
+        model_id="gemini31pro",
+        company="Gemini",
+        provider="Google",
+        family="Gemini",
+        label="Gemini 3.1 Pro Preview",
+        api_model="google/gemini-3.1-pro-preview",
+        prompt_template=PROMPT_TRYTO,
+        input_price_yuan_per_million=14.6,
+        output_price_yuan_per_million=87.6,
+        supports_reasoning_trace=False,
+    ),
+    "deepseek32": ModelConfig(
+        model_id="deepseek32",
+        company="DeepSeek",
+        provider="Qiniu",
+        family="DeepSeek",
+        label="DeepSeek V3.2",
+        api_model="qiniu/deepseek-v3.2",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=2.0,
+        output_price_yuan_per_million=3.0,
+        supports_reasoning_trace=True,
+        extra_body={"thinking": {"type": "enabled"}},
+    ),
 }
+
+
+ARCHIVED_FALLBACK_PRIORITY = [
+    "doubao",
+    "gemini",
+    "oss",
+    "qwen35plus",
+    "glm5",
+    "minimax25hs",
+    "kimi25",
+]
+
+
+def resolve_archived_example_for_model(
+    archived_by_model: Dict[str, Any], model_id: str
+) -> Dict[str, Any]:
+    if model_id in archived_by_model:
+        return archived_by_model[model_id]
+
+    target_family = MODEL_CONFIGS[model_id].family
+    for fallback_model_id, fallback_config in MODEL_CONFIGS.items():
+        if fallback_model_id in archived_by_model and fallback_config.family == target_family:
+            return archived_by_model[fallback_model_id]
+
+    for fallback_model_id in ARCHIVED_FALLBACK_PRIORITY:
+        if fallback_model_id in archived_by_model:
+            return archived_by_model[fallback_model_id]
+
+    if archived_by_model:
+        return next(iter(archived_by_model.values()))
+
+    raise KeyError(f"Example archive is missing model data for {model_id}.")
 
 
 def load_examples_payload() -> Dict[str, Any]:
@@ -234,10 +411,19 @@ def load_examples_payload() -> Dict[str, Any]:
     with DATA_PATH.open("r", encoding="utf-8") as f:
         payload = json.load(f)
 
+    for example in payload.get("examples", []):
+        archived_by_model = example.get("archived", {})
+        example["archived"] = {
+            model_id: deepcopy(resolve_archived_example_for_model(archived_by_model, model_id))
+            for model_id in MODEL_CONFIGS
+        }
+
     payload["models"] = {
         model_id: {
             **payload.get("models", {}).get(model_id, {}),
             "company": config.company,
+            "provider": config.provider,
+            "family": config.family,
             "label": config.label,
             "apiModel": config.api_model,
             "supportsReasoningTrace": config.supports_reasoning_trace,
@@ -297,19 +483,26 @@ def build_opener() -> request.OpenerDirector:
 
 
 def build_api_payload(prompt_text: str, config: ModelConfig, stream: bool) -> Dict[str, Any]:
-    return {
+    temperature = config.temperature_override
+    if temperature is None:
+        temperature = float(os.environ.get("TRS_DEMO_TEMPERATURE", "0.7"))
+
+    payload = {
         "model": config.api_model,
         "messages": [{"role": "user", "content": prompt_text}],
         "content_filter": False,
         "stream": stream,
-        "temperature": float(os.environ.get("TRS_DEMO_TEMPERATURE", "0.7")),
-        "max_tokens": config.max_tokens,
+        "temperature": temperature,
         "top_p": 0.9,
         "top_k": 0,
         "repetition_penalty": 1.05,
         "num_beams": 1,
         "user": "trs_demo_web",
     }
+    payload[config.max_tokens_param] = config.max_tokens
+    if config.extra_body:
+        payload["extra_body"] = config.extra_body
+    return payload
 
 
 def build_json_api_request(payload: Dict[str, Any]) -> request.Request:
@@ -524,6 +717,8 @@ def model_payload(config: ModelConfig) -> Dict[str, Any]:
     return {
         "id": config.model_id,
         "company": config.company,
+        "provider": config.provider,
+        "family": config.family,
         "label": config.label,
         "apiModel": config.api_model,
         "supportsReasoningTrace": config.supports_reasoning_trace,
