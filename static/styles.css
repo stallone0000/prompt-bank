@@ -197,6 +197,7 @@ a {
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
   margin-top: 12px;
+  align-items: start;
 }
 
 .sidebar {
@@ -224,6 +225,7 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  align-items: start;
 }
 
 .mode-card {
@@ -1005,6 +1007,7 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-top: 12px;
+  align-items: start;
 }
 
 .summary-card {
@@ -1060,6 +1063,7 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-top: 14px;
+  align-items: start;
 }
 
 .result-card {
@@ -1067,6 +1071,7 @@ a {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--panel);
+  align-self: start;
 }
 
 .result-card.emphasis {
