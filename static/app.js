@@ -2,9 +2,14 @@ const state = {
   payload: null,
   modelId: "doubao",
   verifierModelId: null,
+  skillDatasetIds: [],
   selectedFamilyId: null,
   familySelections: {},
   exampleId: null,
+  examplePreviewCache: {},
+  exampleLookupPending: false,
+  exampleLookupRequestId: 0,
+  exampleLookupAbortController: null,
   sourceMode: "example",
   customDraft: {
     question: "",
@@ -49,6 +54,7 @@ const nodes = {
   applyCustomButton: document.getElementById("applyCustomButton"),
   customCorpusMeta: document.getElementById("customCorpusMeta"),
   customStatus: document.getElementById("customStatus"),
+  skillDatasetControls: document.getElementById("skillDatasetControls"),
   exampleList: document.getElementById("exampleList"),
   modelCount: document.getElementById("modelCount"),
   modelGroupGrid: document.getElementById("modelGroupGrid"),
@@ -62,6 +68,7 @@ const nodes = {
   referenceAnswer: document.getElementById("referenceAnswer"),
   currentModel: document.getElementById("currentModel"),
   verifierModel: document.getElementById("verifierModel"),
+  skillCardSource: document.getElementById("skillCardSource"),
   skillCard: document.getElementById("skillCard"),
   runStatus: document.getElementById("runStatus"),
   liveSummary: document.getElementById("liveSummary"),
@@ -71,7 +78,6 @@ const nodes = {
   trsReasoning: document.getElementById("trsReasoning"),
   directAnswer: document.getElementById("directAnswer"),
   trsAnswer: document.getElementById("trsAnswer"),
-  template: document.getElementById("exampleCardTemplate"),
 };
 
 const FAMILY_ORDER = [
@@ -166,6 +172,23 @@ function formatMaybeYuan(value) {
 
 function verifierOptions() {
   return state.payload?.verifier?.options || [];
+}
+
+function skillDatasetOptions() {
+  return state.payload?.skillDatasets?.options || [];
+}
+
+function datasetSelectionKey(datasetIds = state.skillDatasetIds) {
+  return [...datasetIds].sort().join(",");
+}
+
+function selectedSkillDatasets() {
+  const selected = new Set(state.skillDatasetIds);
+  return skillDatasetOptions().filter((option) => selected.has(option.id));
+}
+
+function availableSkillDatasetIds() {
+  return skillDatasetOptions().map((option) => option.id);
 }
 
 function sleep(ms) {
@@ -507,8 +530,99 @@ function renderVerifierSelector() {
   nodes.verifierModel.value = state.verifierModelId;
 }
 
+function initializeSkillDatasetSelection() {
+  const options = skillDatasetOptions();
+  const defaults = state.payload?.skillDatasets?.defaultSelectedIds || [];
+  const available = new Set(options.map((option) => option.id));
+  const selected = defaults.filter((id) => available.has(id));
+  state.skillDatasetIds = selected.length ? selected : options.slice(0, 1).map((option) => option.id);
+}
+
+function updateSkillDatasetMeta() {
+  const selected = selectedSkillDatasets();
+  if (!selected.length) {
+    nodes.customCorpusMeta.textContent = "Select at least one skill dataset.";
+    return;
+  }
+
+  const totalDocCount = selected.reduce((sum, option) => sum + (option.docCount || 0), 0);
+  const label = selected.map((option) => option.label).join(" + ");
+  nodes.customCorpusMeta.textContent = `Live retrieval over ${formatNumber(totalDocCount)} skill cards from ${label}.`;
+}
+
+function renderSkillDatasetControls() {
+  nodes.skillDatasetControls.innerHTML = "";
+  const selected = new Set(state.skillDatasetIds);
+  skillDatasetOptions().forEach((option) => {
+    const label = document.createElement("label");
+    label.className = selected.has(option.id) ? "dataset-toggle active" : "dataset-toggle";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = selected.has(option.id);
+    input.addEventListener("change", async (event) => {
+      const next = new Set(state.skillDatasetIds);
+      if (event.target.checked) {
+        next.add(option.id);
+      } else {
+        if (next.size === 1) {
+          event.target.checked = true;
+          renderSkillDatasetControls();
+          return;
+        }
+        next.delete(option.id);
+      }
+      state.skillDatasetIds = skillDatasetOptions()
+        .map((dataset) => dataset.id)
+        .filter((datasetId) => next.has(datasetId));
+      renderSkillDatasetControls();
+      updateSkillDatasetMeta();
+      clearLiveResults();
+      try {
+        if (state.sourceMode === "custom") {
+          if (!state.customDirty && state.customDraft.question.trim() && state.customDraft.answer.trim()) {
+            await prepareCustomProblem({ clearResults: false, force: true });
+          } else {
+            renderSelection();
+          }
+        } else {
+          await prepareExamplePreview({ clearResults: false, force: true });
+        }
+      } catch (error) {
+        nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
+      }
+    });
+
+    const mark = document.createElement("span");
+    mark.className = "dataset-toggle-mark";
+    mark.textContent = "✓";
+
+    const text = document.createElement("span");
+    text.textContent = option.label;
+
+    label.append(input, mark, text);
+    nodes.skillDatasetControls.appendChild(label);
+  });
+}
+
 function selectedExample() {
   return state.payload.examples.find((example) => example.id === state.exampleId);
+}
+
+function examplePreviewCacheKey(exampleId = state.exampleId, datasetIds = state.skillDatasetIds) {
+  return `${exampleId}@@${datasetSelectionKey(datasetIds)}`;
+}
+
+function currentExamplePreview() {
+  return state.examplePreviewCache[examplePreviewCacheKey()] || null;
+}
+
+function cancelExampleLookup() {
+  if (state.exampleLookupAbortController) {
+    state.exampleLookupAbortController.abort();
+    state.exampleLookupAbortController = null;
+  }
+  state.exampleLookupPending = false;
 }
 
 function renderSourcePanels() {
@@ -519,12 +633,27 @@ function renderSourcePanels() {
   nodes.customPanel.classList.toggle("hidden", !customActive);
 }
 
+function buildExamplePendingContext() {
+  const example = selectedExample();
+  if (!example) {
+    return null;
+  }
+  return {
+    ...example,
+    skillText: "(Searching the selected skill datasets...)",
+    retrieval: {
+      datasetLabel: "",
+      sourceLabel: "",
+    },
+  };
+}
+
 function buildCustomPlaceholderContext() {
   return {
     id: "custom-problem-placeholder",
     title: "Custom Problem",
     subtitle: state.customLookupPending
-      ? "Searching the DeepMath skill archive..."
+      ? "Searching the selected skill datasets..."
       : "Fill in the question and answer, then apply the problem to retrieve a matching skill card.",
     question: "Your custom question will appear here after you apply it.",
     answer: "—",
@@ -542,12 +671,12 @@ function buildPendingCustomContext() {
   return {
     id: "custom-problem-pending",
     title: "Custom Problem",
-    subtitle: "Searching the DeepMath skill archive...",
+    subtitle: "Searching the selected skill datasets...",
     question: question || "Your custom question will appear here after you apply it.",
     answer: answer || "—",
     topic: "Custom Input",
     difficulty: "Searching",
-    skillText: "(Searching the DeepMath-103K skill archive...)",
+    skillText: "(Searching the selected skill datasets...)",
   };
 }
 
@@ -561,13 +690,13 @@ function currentProblemContext() {
     }
     return buildCustomPlaceholderContext();
   }
-  return selectedExample();
+  return currentExamplePreview() || buildExamplePendingContext();
 }
 
 function describeCustomMatch(custom) {
   const retrieval = custom?.retrieval || {};
   if (retrieval.noExperience) {
-    return `No matching skill card found in ${retrieval.sourceLabel || "the DeepMath skill archive"}. Using no experience.`;
+    return `No matching skill card found in ${retrieval.sourceLabel || "the selected skill datasets"}. Using no experience.`;
   }
   const parts = [];
   if (retrieval.sourceLabel) {
@@ -593,6 +722,8 @@ function cancelCustomLookup() {
 function setSourceMode(mode) {
   if (mode === "example") {
     cancelCustomLookup();
+  } else {
+    cancelExampleLookup();
   }
   state.sourceMode = mode;
   renderSourcePanels();
@@ -612,6 +743,81 @@ function applyCustomSelection(custom, options = {}) {
   renderSelection();
   if (clearResults) {
     clearLiveResults();
+  }
+}
+
+async function prepareExamplePreview(options = {}) {
+  const { clearResults = true, force = false } = options;
+  const example = selectedExample();
+  if (!example) {
+    return null;
+  }
+
+  const cacheKey = examplePreviewCacheKey(example.id);
+  if (!force && state.examplePreviewCache[cacheKey]) {
+    renderSelection();
+    if (clearResults) {
+      clearLiveResults();
+    }
+    return state.examplePreviewCache[cacheKey];
+  }
+
+  const requestId = state.exampleLookupRequestId + 1;
+  state.exampleLookupRequestId = requestId;
+  if (state.exampleLookupAbortController) {
+    state.exampleLookupAbortController.abort();
+  }
+  const controller = new AbortController();
+  state.exampleLookupAbortController = controller;
+  state.exampleLookupPending = true;
+  renderSelection();
+
+  try {
+    const response = await fetch("/api/retrieve_skill", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+      signal: controller.signal,
+      body: JSON.stringify({
+        id: example.id,
+        questionId: example.questionId,
+        title: example.title,
+        subtitle: example.subtitle,
+        topic: example.topic,
+        difficulty: example.difficulty,
+        question: example.question,
+        referenceAnswer: example.answer,
+        sourceMode: "example",
+        skillDatasetIds: state.skillDatasetIds,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Failed to retrieve a skill card.");
+    }
+    if (requestId !== state.exampleLookupRequestId) {
+      return null;
+    }
+    state.examplePreviewCache[cacheKey] = payload.preview;
+    renderSelection();
+    if (clearResults) {
+      clearLiveResults();
+    }
+    return payload.preview;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return null;
+    }
+    nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
+    throw error;
+  } finally {
+    if (requestId === state.exampleLookupRequestId) {
+      state.exampleLookupPending = false;
+      state.exampleLookupAbortController = null;
+      renderSelection();
+    }
   }
 }
 
@@ -643,7 +849,7 @@ function markCustomDirty() {
 }
 
 async function prepareCustomProblem(options = {}) {
-  const { clearResults = true } = options;
+  const { clearResults = true, force = false } = options;
   syncCustomDraftFromInputs();
   const question = state.customDraft.question.trim();
   const answer = state.customDraft.answer.trim();
@@ -672,8 +878,11 @@ async function prepareCustomProblem(options = {}) {
       cache: "no-store",
       signal: controller.signal,
       body: JSON.stringify({
+        id: "custom-problem",
         question,
         referenceAnswer: answer,
+        sourceMode: "custom",
+        skillDatasetIds: state.skillDatasetIds,
       }),
     });
     const payload = await response.json();
@@ -683,8 +892,8 @@ async function prepareCustomProblem(options = {}) {
     if (requestId !== state.customLookupRequestId) {
       return null;
     }
-    applyCustomSelection(payload.custom, { clearResults });
-    return payload.custom;
+    applyCustomSelection(payload.preview, { clearResults });
+    return payload.preview;
   } catch (error) {
     if (error?.name === "AbortError") {
       return null;
@@ -706,26 +915,52 @@ async function prepareCustomProblem(options = {}) {
 
 function renderExamples() {
   nodes.exampleList.innerHTML = "";
-  state.payload.examples.forEach((example) => {
-    const fragment = nodes.template.content.cloneNode(true);
-    const button = fragment.querySelector(".example-card");
-    fragment.querySelector(".example-kicker").textContent = `${example.topic.split(" -> ").slice(-1)[0]} · D${example.difficulty}`;
-    fragment.querySelector(".example-title").textContent = example.title;
-    if (state.sourceMode === "example" && example.id === state.exampleId) {
-      button.classList.add("active");
-    }
-    button.addEventListener("click", () => {
-      state.exampleId = example.id;
-      nodes.customStatus.textContent = "Switch back to Custom Problem to search the DeepMath skill archive.";
+  (state.payload.exampleGroups || []).forEach((group) => {
+    const card = document.createElement("article");
+    const active = group.optionIds.includes(state.exampleId);
+    card.className = active ? "example-group-card active" : "example-group-card";
+
+    const kicker = document.createElement("span");
+    kicker.className = "example-group-kicker";
+    kicker.textContent = group.kind === "benchmark" ? "Benchmark" : "Curated";
+
+    const title = document.createElement("strong");
+    title.className = "example-group-title";
+    title.textContent = group.label;
+
+    const subtitle = document.createElement("div");
+    subtitle.className = "example-group-subtitle";
+    subtitle.textContent = group.subtitle || "";
+
+    const select = document.createElement("select");
+    select.className = "example-group-select";
+    group.options.forEach((option) => {
+      const element = document.createElement("option");
+      element.value = option.id;
+      element.textContent = option.label;
+      select.appendChild(element);
+    });
+    select.value = active ? state.exampleId : group.options[0]?.id;
+    select.addEventListener("change", async (event) => {
+      state.exampleId = event.target.value;
+      nodes.customStatus.textContent = "Switch back to Custom Problem to search the selected skill datasets.";
       setSourceMode("example");
       clearLiveResults();
+      try {
+        await prepareExamplePreview({ clearResults: false });
+      } catch {}
     });
-    nodes.exampleList.appendChild(fragment);
+
+    card.append(kicker, title, subtitle, select);
+    nodes.exampleList.appendChild(card);
   });
 }
 
 function renderSelection() {
   const problem = currentProblemContext();
+  if (!problem) {
+    return;
+  }
   const isCustom = state.sourceMode === "custom";
   const isResolvedCustom = isCustom && state.customContext && !state.customDirty;
   nodes.topicBadge.textContent = isCustom
@@ -739,7 +974,9 @@ function renderSelection() {
       : state.customLookupPending
         ? "Searching"
         : "Awaiting Retrieval"
-    : `Difficulty ${problem.difficulty}`;
+    : Number.isFinite(Number(problem.difficulty))
+      ? `Difficulty ${problem.difficulty}`
+      : String(problem.difficulty || "Curated");
   nodes.questionTitle.textContent = problem.title;
   nodes.questionSubtitle.textContent = problem.subtitle;
   nodes.questionText.textContent = problem.question;
@@ -748,9 +985,9 @@ function renderSelection() {
   if (state.verifierModelId) {
     nodes.verifierModel.value = state.verifierModelId;
   }
-  nodes.skillCard.textContent = isCustom
-    ? problem.skillText
-    : problem.archived[state.modelId].trs.skill_text;
+  nodes.skillCard.textContent =
+    problem.skillText || problem.archived?.[state.modelId]?.trs?.skill_text || "(No skill card retrieved yet.)";
+  nodes.skillCardSource.textContent = problem.retrieval?.datasetLabel ? `· ${problem.retrieval.datasetLabel}` : "";
   typesetMath([nodes.questionText, nodes.referenceAnswer, nodes.skillCard]);
 }
 
@@ -1062,6 +1299,19 @@ function handleStreamEvent(eventName, payload) {
           skillText: payload.retrievedSkill || state.customContext.skillText,
         };
         renderSelection();
+      } else if (payload.mode === "example") {
+        const preview = currentExamplePreview();
+        if (preview) {
+          state.examplePreviewCache[examplePreviewCacheKey()] = {
+            ...preview,
+            subtitle: payload.questionSubtitle || preview.subtitle,
+            topic: payload.topic || preview.topic,
+            difficulty: payload.difficulty ?? preview.difficulty,
+            retrieval: payload.retrieval || preview.retrieval,
+            skillText: payload.retrievedSkill || preview.skillText,
+          };
+          renderSelection();
+        }
       }
       seedReasoningPlaceholders();
       updateRunStatus();
@@ -1179,27 +1429,23 @@ function isRetryableStreamError(error) {
 }
 
 function buildRunRequestBody(runId) {
-  if (state.sourceMode === "custom" && state.customContext) {
-    return {
-      modelId: state.modelId,
-      verifierModelId: state.verifierModelId,
-      runId,
-      question: state.customContext.question,
-      referenceAnswer: state.customContext.answer,
-      skillText: state.customContext.skillText,
-      skillScore: state.customContext.skillScore,
-      title: state.customContext.title,
-      subtitle: state.customContext.subtitle,
-      topic: state.customContext.topic,
-      difficulty: state.customContext.difficulty,
-    };
-  }
-
+  const problem = currentProblemContext();
   return {
-    exampleId: state.exampleId,
     modelId: state.modelId,
     verifierModelId: state.verifierModelId,
     runId,
+    id: problem.id,
+    questionId: problem.questionId || "",
+    sourceMode: state.sourceMode,
+    title: problem.title,
+    subtitle: problem.subtitle,
+    topic: problem.topic,
+    difficulty: problem.difficulty,
+    question: problem.question,
+    referenceAnswer: problem.answer,
+    skillText: problem.skillText || "",
+    skillScore: problem.skillScore || 0,
+    skillDatasetIds: state.skillDatasetIds,
   };
 }
 
@@ -1264,6 +1510,15 @@ async function runComparison() {
     try {
       if (state.customDirty || !state.customContext) {
         await prepareCustomProblem();
+      }
+    } catch (error) {
+      nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
+      return;
+    }
+  } else {
+    try {
+      if (!currentExamplePreview()) {
+        await prepareExamplePreview({ clearResults: false });
       }
     } catch (error) {
       nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
@@ -1351,15 +1606,15 @@ async function runComparison() {
 async function boot() {
   const response = await fetch("/api/examples");
   state.payload = await response.json();
-  state.exampleId = state.payload.examples[0].id;
+  state.exampleId =
+    state.payload.exampleGroups?.[0]?.optionIds?.[0] || state.payload.examples?.[0]?.id || null;
   initializeFamilySelections();
   initializeVerifierSelection();
+  initializeSkillDatasetSelection();
   nodes.customQuestion.value = state.customDraft.question;
   nodes.customAnswer.value = state.customDraft.answer;
-  const corpusMeta = state.payload.skillCorpus || {};
-  nodes.customCorpusMeta.textContent = corpusMeta.docCount
-    ? `Live retrieval over ${formatNumber(corpusMeta.docCount)} skill cards from ${corpusMeta.label || "DeepMath-103K"}.`
-    : "Live retrieval over the DeepMath skill archive.";
+  renderSkillDatasetControls();
+  updateSkillDatasetMeta();
   renderModelSelector();
   renderVerifierSelector();
   renderSourcePanels();
@@ -1372,6 +1627,9 @@ async function boot() {
   nodes.examplesModeButton.addEventListener("click", () => {
     setSourceMode("example");
     clearLiveResults();
+    prepareExamplePreview({ clearResults: false }).catch((error) => {
+      nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
+    });
   });
   nodes.customModeButton.addEventListener("click", () => {
     setSourceMode("custom");
@@ -1392,6 +1650,7 @@ async function boot() {
     clearLiveResults();
   });
   nodes.stopButton.disabled = true;
+  await prepareExamplePreview({ clearResults: false });
 }
 
 boot().catch((error) => {

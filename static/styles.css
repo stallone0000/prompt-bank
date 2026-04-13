@@ -105,6 +105,65 @@ a {
   gap: 8px;
 }
 
+.dataset-toggle-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dataset-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.dataset-toggle:hover {
+  border-color: var(--line-strong);
+  background: #ffffff;
+}
+
+.dataset-toggle.active {
+  border-color: rgba(16, 163, 127, 0.35);
+  background: #effaf5;
+  color: var(--ink);
+}
+
+.dataset-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dataset-toggle-mark {
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.dataset-toggle.active .dataset-toggle-mark {
+  border-color: rgba(16, 163, 127, 0.45);
+  background: var(--accent);
+  color: #ffffff;
+}
+
 .topbar-link,
 .topbar-chip,
 .badge,
@@ -279,25 +338,23 @@ a {
   gap: 8px;
 }
 
-.example-card {
+.example-group-card {
   width: 100%;
   padding: 11px 12px 12px;
-  border: 1px solid transparent;
+  border: 1px solid rgba(31, 31, 31, 0.08);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.72);
   color: var(--ink);
-  text-align: left;
-  cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease;
 }
 
-.example-card:hover,
-.example-card.active {
+.example-group-card:hover,
+.example-group-card.active {
   border-color: rgba(16, 163, 127, 0.28);
   background: #ffffff;
 }
 
-.example-kicker,
+.example-group-kicker,
 .question-subtitle,
 #runStatus,
 .section-heading p,
@@ -307,19 +364,54 @@ a {
   color: var(--muted);
 }
 
-.example-kicker {
+.example-group-kicker {
   display: block;
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-.example-title {
+.example-group-title {
   display: block;
   margin-top: 6px;
   font-size: 0.92rem;
   line-height: 1.4;
   font-weight: 600;
+}
+
+.example-group-subtitle {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.example-group-select {
+  width: 100%;
+  min-width: 0;
+  margin-top: 10px;
+  padding: 9px 30px 9px 10px;
+  border: 1px solid #d8d1c8;
+  border-radius: 10px;
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #6a6f78 50%),
+    linear-gradient(135deg, #6a6f78 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) calc(50% - 2px),
+    calc(100% - 10px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.25;
+  appearance: none;
+}
+
+.example-group-select:focus {
+  outline: none;
+  border-color: rgba(16, 163, 127, 0.45);
+  box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.12);
 }
 
 .stage {
@@ -712,6 +804,11 @@ a {
   cursor: pointer;
   font-weight: 600;
   list-style: none;
+}
+
+.skill-card-source {
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .collapse-panel summary::-webkit-details-marker {

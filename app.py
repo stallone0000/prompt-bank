@@ -26,43 +26,75 @@ from urllib.parse import urlparse
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 DATA_PATH = APP_DIR / "data" / "demo_examples.json"
-DEPLOYABLE_SKILL_CORPUS_PATH = APP_DIR / "data" / "deepmath_103k_oss_skill_corpus.jsonl.gz"
+BENCHMARK_GROUPS_PATH = APP_DIR / "data" / "benchmark_example_groups.json"
+DEEPMATH_SKILL_CORPUS_PATH = APP_DIR / "data" / "deepmath_103k_oss_skill_corpus.jsonl.gz"
+AOPS_SKILL_CORPUS_PATH = APP_DIR / "data" / "aops_skill_corpus.jsonl.gz"
 LEGACY_SKILL_CORPUS_PATH = APP_DIR / "data" / "trs_skill_corpus.jsonl"
-LOCAL_SKILL_CORPUS_CANDIDATES = (
+DEEPMATH_SKILL_CORPUS_CANDIDATES = (
     {
-        "path": DEPLOYABLE_SKILL_CORPUS_PATH,
+        "path": DEEPMATH_SKILL_CORPUS_PATH,
         "format": "deployable",
-        "label": "DeepMath-103K OSS Skill Archive",
+        "label": "DeepMath-103K",
     },
     {
         "path": APP_DIR.parent / "DeepMath-103K" / "cot-bank" / "deepmath_train_oss_distillation_verify_with_heuristics.jsonl",
         "format": "heuristic",
         "source_key": "oss_103k",
-        "source_label": "DeepMath-103K OSS Skill Archive",
+        "source_label": "DeepMath-103K",
     },
     {
         "path": APP_DIR.parent / "DeepMath-103K" / "cot-bank" / "deepmath_train_doubao_distillation_verify_with_heuristics.jsonl",
         "format": "heuristic",
         "source_key": "doubao_103k",
-        "source_label": "DeepMath-103K Doubao Skill Archive",
+        "source_label": "DeepMath-103K",
     },
     {
         "path": APP_DIR.parent / "DeepMath-103K" / "cot-bank" / "deepmath_train_oss_distillation_verify_with_heuristics_rest.jsonl",
         "format": "heuristic",
         "source_key": "oss_93k",
-        "source_label": "DeepMath-93K OSS Skill Archive",
+        "source_label": "DeepMath-93K",
     },
     {
         "path": APP_DIR.parent / "DeepMath-103K" / "cot-bank" / "deepmath_train_doubao_distillation_verify_with_heuristics_rest.jsonl",
         "format": "heuristic",
         "source_key": "doubao_93k",
-        "source_label": "DeepMath-93K Doubao Skill Archive",
+        "source_label": "DeepMath-93K",
     },
     {
         "path": LEGACY_SKILL_CORPUS_PATH,
         "format": "deployable",
         "label": "DeepMath deployable skill archive",
     },
+)
+AOPS_SKILL_CORPUS_CANDIDATES = (
+    {
+        "path": AOPS_SKILL_CORPUS_PATH,
+        "format": "deployable",
+        "label": "AoPS",
+    },
+    {
+        "path": APP_DIR.parent / "AoPS-wiki" / "results" / "aops_skill_cards_full.jsonl",
+        "format": "aops",
+        "source_key": "aops",
+        "source_label": "AoPS",
+    },
+)
+SKILL_DATASET_OPTIONS = (
+    {
+        "id": "deepmath",
+        "label": "DeepMath-103K",
+        "candidates": DEEPMATH_SKILL_CORPUS_CANDIDATES,
+        "default_selected": True,
+    },
+    {
+        "id": "aops",
+        "label": "AoPS",
+        "candidates": AOPS_SKILL_CORPUS_CANDIDATES,
+        "default_selected": True,
+    },
+)
+DEFAULT_SELECTED_SKILL_DATASET_IDS = tuple(
+    option["id"] for option in SKILL_DATASET_OPTIONS if option["default_selected"]
 )
 
 PROMPT_DIRECT = """You are a helpful and harmless assistant.
@@ -544,6 +576,16 @@ ARCHIVED_FALLBACK_PRIORITY = [
 def resolve_archived_example_for_model(
     archived_by_model: Dict[str, Any], model_id: str
 ) -> Dict[str, Any]:
+    if not archived_by_model:
+        return {
+            "direct": {"verification": "UNKNOWN"},
+            "trs": {
+                "verification": "UNKNOWN",
+                "skill_text": NO_EXPERIENCE_SKILL_TEXT,
+                "skill_score": 0.0,
+            },
+        }
+
     if model_id in archived_by_model:
         return archived_by_model[model_id]
 
@@ -556,10 +598,60 @@ def resolve_archived_example_for_model(
         if fallback_model_id in archived_by_model:
             return archived_by_model[fallback_model_id]
 
-    if archived_by_model:
-        return next(iter(archived_by_model.values()))
+    return next(iter(archived_by_model.values()))
 
-    raise KeyError(f"Example archive is missing model data for {model_id}.")
+
+def load_benchmark_example_groups() -> tuple[list[Dict[str, Any]], list[Dict[str, Any]]]:
+    if not BENCHMARK_GROUPS_PATH.exists():
+        return [], []
+
+    with BENCHMARK_GROUPS_PATH.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    groups: list[Dict[str, Any]] = []
+    examples: list[Dict[str, Any]] = []
+    for raw_group in payload.get("groups", []):
+        option_ids: list[str] = []
+        options_payload: list[Dict[str, Any]] = []
+        for option in raw_group.get("options", []):
+            example = {
+                "id": option["id"],
+                "questionId": option.get("questionId") or "",
+                "title": option["title"],
+                "subtitle": option.get("subtitle") or raw_group.get("label") or "",
+                "highlight": "Live benchmark example with runtime skill retrieval.",
+                "question": option.get("question") or "",
+                "answer": option.get("answer") or "",
+                "topic": option.get("topic") or raw_group.get("label") or "Benchmark",
+                "difficulty": option.get("difficulty") or "Benchmark",
+                "benchmark": option.get("benchmark") or "",
+                "archived": {
+                    model_id: deepcopy(resolve_archived_example_for_model({}, model_id))
+                    for model_id in MODEL_CONFIGS
+                },
+            }
+            examples.append(example)
+            option_ids.append(example["id"])
+            options_payload.append(
+                {
+                    "id": example["id"],
+                    "label": option.get("optionLabel") or example["title"],
+                    "title": example["title"],
+                }
+            )
+
+        groups.append(
+            {
+                "id": raw_group.get("id") or f"group::{raw_group.get('label', 'benchmark')}",
+                "label": raw_group.get("label") or "Benchmark",
+                "subtitle": raw_group.get("subtitle") or "",
+                "kind": raw_group.get("kind") or "benchmark",
+                "optionIds": option_ids,
+                "options": options_payload,
+            }
+        )
+
+    return groups, examples
 
 
 def load_examples_payload() -> Dict[str, Any]:
@@ -570,12 +662,36 @@ def load_examples_payload() -> Dict[str, Any]:
     with DATA_PATH.open("r", encoding="utf-8") as f:
         payload = json.load(f)
 
+    groups: list[Dict[str, Any]] = []
     for example in payload.get("examples", []):
         archived_by_model = example.get("archived", {})
         example["archived"] = {
             model_id: deepcopy(resolve_archived_example_for_model(archived_by_model, model_id))
             for model_id in MODEL_CONFIGS
         }
+    if payload.get("examples"):
+        groups.append(
+            {
+                "id": "group::deepmath-curated",
+                "label": "DeepMath Curated",
+                "subtitle": f"{len(payload['examples'])} demo problems",
+                "kind": "deepmath",
+                "optionIds": [example["id"] for example in payload["examples"]],
+                "options": [
+                    {
+                        "id": example["id"],
+                        "label": example["title"],
+                        "title": example["title"],
+                    }
+                    for example in payload["examples"]
+                ],
+            }
+        )
+
+    benchmark_groups, benchmark_examples = load_benchmark_example_groups()
+    payload["examples"].extend(benchmark_examples)
+    groups.extend(benchmark_groups)
+    payload["exampleGroups"] = groups
 
     payload["models"] = {
         model_id: {
@@ -635,16 +751,26 @@ def open_jsonl_handle(path: Path):
     return path.open("r", encoding="utf-8")
 
 
-def iter_skill_corpus_records(payload: Dict[str, Any]) -> Dict[str, Any]:
+def iter_skill_dataset_records(dataset_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     records: list[Dict[str, Any]] = []
+    candidates = ()
+    fallback_label = dataset_id
+    if dataset_id == "deepmath":
+        candidates = DEEPMATH_SKILL_CORPUS_CANDIDATES
+        fallback_label = "DeepMath-103K"
+    elif dataset_id == "aops":
+        candidates = AOPS_SKILL_CORPUS_CANDIDATES
+        fallback_label = "AoPS"
+    else:
+        raise ValueError(f"Unsupported skill dataset: {dataset_id}")
 
-    for candidate in LOCAL_SKILL_CORPUS_CANDIDATES:
+    for candidate in candidates:
         path = candidate["path"]
         if not path.exists():
             continue
 
         records = []
-        source_label = candidate.get("label") or candidate.get("source_label") or "DeepMath skill archive"
+        source_label = candidate.get("label") or candidate.get("source_label") or fallback_label
         with open_jsonl_handle(path) as handle:
             for line in handle:
                 if not line.strip():
@@ -653,8 +779,7 @@ def iter_skill_corpus_records(payload: Dict[str, Any]) -> Dict[str, Any]:
                 if candidate["format"] == "deployable":
                     source_key = (item.get("source_key") or "").strip()
                     item_label = (item.get("source_label") or source_label_for_key(source_key)).strip()
-                    if item_label:
-                        source_label = item_label
+                    effective_label = candidate.get("label") or item_label or fallback_label
                     records.append(
                         {
                             "question_id": item.get("question_id") or "",
@@ -663,9 +788,27 @@ def iter_skill_corpus_records(payload: Dict[str, Any]) -> Dict[str, Any]:
                             "topic": (item.get("topic") or "").strip(),
                             "difficulty": item.get("difficulty"),
                             "skill_text": (item.get("skill_text") or "").strip(),
+                            "keywords": (item.get("keywords") or "").strip(),
                             "skill_score": float(item.get("skill_score") or 0.0),
                             "source_key": source_key,
-                            "source_label": item_label,
+                            "source_label": effective_label,
+                        }
+                    )
+                    continue
+
+                if candidate["format"] == "aops":
+                    records.append(
+                        {
+                            "question_id": item.get("question_id") or "",
+                            "question": (item.get("question") or "").strip(),
+                            "answer": (item.get("answer") or "").strip(),
+                            "topic": (item.get("topic") or "").strip(),
+                            "difficulty": item.get("difficulty"),
+                            "skill_text": (item.get("heuristic") or item.get("skill_text") or "").strip(),
+                            "keywords": (item.get("keywords") or "").strip(),
+                            "skill_score": float(item.get("skill_score") or 0.0),
+                            "source_key": candidate["source_key"],
+                            "source_label": candidate["source_label"],
                         }
                     )
                     continue
@@ -678,52 +821,61 @@ def iter_skill_corpus_records(payload: Dict[str, Any]) -> Dict[str, Any]:
                         "topic": (item.get("topic") or "").strip(),
                         "difficulty": item.get("difficulty"),
                         "skill_text": (item.get("heuristic") or "").strip(),
+                        "keywords": (item.get("keywords") or "").strip(),
                         "skill_score": float(item.get("heuristic_score") or 0.0),
                         "source_key": candidate["source_key"],
                         "source_label": candidate["source_label"],
                     }
                 )
         if records:
-            return {"records": records, "label": source_label, "path": str(path)}
+            return {
+                "dataset_id": dataset_id,
+                "records": records,
+                "label": source_label,
+                "path": str(path),
+            }
 
-    for source_key, path_str in payload.get("sources", {}).items():
-        if not source_key.endswith("_trs"):
-            continue
-        path = Path(path_str)
-        if not path.exists():
-            continue
+    if dataset_id == "deepmath":
+        for source_key, path_str in payload.get("sources", {}).items():
+            if not source_key.endswith("_trs"):
+                continue
+            path = Path(path_str)
+            if not path.exists():
+                continue
 
-        with path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                if not line.strip():
-                    continue
-                item = json.loads(line)
-                records.append(
-                    {
-                        "question_id": item.get("question_id") or "",
-                        "question": (item.get("question") or "").strip(),
-                        "answer": (item.get("answer") or "").strip(),
-                        "topic": (item.get("topic") or "").strip(),
-                        "difficulty": item.get("difficulty"),
-                        "skill_text": (item.get("heuristic_used") or "").strip(),
-                        "skill_score": float(item.get("heuristic_score") or 0.0),
-                        "source_key": source_key,
-                        "source_label": source_label_for_key(source_key),
-                    }
-                )
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    item = json.loads(line)
+                    records.append(
+                        {
+                            "question_id": item.get("question_id") or "",
+                            "question": (item.get("question") or "").strip(),
+                            "answer": (item.get("answer") or "").strip(),
+                            "topic": (item.get("topic") or "").strip(),
+                            "difficulty": item.get("difficulty"),
+                            "skill_text": (item.get("heuristic_used") or "").strip(),
+                            "keywords": (item.get("keywords") or "").strip(),
+                            "skill_score": float(item.get("heuristic_score") or 0.0),
+                            "source_key": source_key,
+                            "source_label": source_label_for_key(source_key),
+                        }
+                    )
 
     return {
+        "dataset_id": dataset_id,
         "records": records,
-        "label": "DeepMath curated TRS archives",
+        "label": fallback_label,
         "path": None,
     }
 
 
-def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
+def build_skill_corpus(payload: Dict[str, Any], dataset_id: str) -> Dict[str, Any]:
     entries: list[Dict[str, Any]] = []
     doc_freq: Counter[str] = Counter()
     seen_pairs: set[tuple[str, str]] = set()
-    corpus_source = iter_skill_corpus_records(payload)
+    corpus_source = iter_skill_dataset_records(dataset_id, payload)
 
     for item in corpus_source["records"]:
         question = item["question"]
@@ -738,17 +890,21 @@ def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         question_token_set = set(tokenize_retrieval_text(question))
         answer_token_set = set(tokenize_retrieval_text(item["answer"]))
-        combined_token_set = question_token_set | answer_token_set
-        if not combined_token_set:
+        topic_token_set = set(tokenize_retrieval_text(item.get("topic") or ""))
+        keyword_token_set = set(tokenize_retrieval_text(item.get("keywords") or ""))
+        retrieval_token_set = question_token_set | answer_token_set | topic_token_set | keyword_token_set
+        if not retrieval_token_set:
             continue
 
-        doc_freq.update(combined_token_set)
+        doc_freq.update(retrieval_token_set)
         entries.append(
             {
                 **item,
                 "question_token_set": question_token_set,
                 "answer_token_set": answer_token_set,
-                "combined_token_set": combined_token_set,
+                "topic_token_set": topic_token_set,
+                "keyword_token_set": keyword_token_set,
+                "retrieval_token_set": retrieval_token_set,
                 "normalized_answer": normalize_answer_text(item["answer"]),
             }
         )
@@ -762,12 +918,53 @@ def build_skill_corpus(payload: Dict[str, Any]) -> Dict[str, Any]:
         "entries": entries,
         "idf": idf,
         "doc_count": total_docs,
+        "dataset_id": dataset_id,
         "label": corpus_source["label"],
         "path": corpus_source["path"],
     }
 
 
-def retrieve_skill_entry(question: str, reference_answer: str, corpus: Dict[str, Any]) -> Dict[str, Any]:
+def build_skill_corpora(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    corpora: Dict[str, Dict[str, Any]] = {}
+    for option in SKILL_DATASET_OPTIONS:
+        corpora[option["id"]] = build_skill_corpus(payload, option["id"])
+    return corpora
+
+
+def resolve_skill_dataset_ids(
+    requested_dataset_ids: Any,
+    corpora: Dict[str, Dict[str, Any]],
+) -> list[str]:
+    available_ids = [option["id"] for option in SKILL_DATASET_OPTIONS if option["id"] in corpora]
+    if not available_ids:
+        return []
+
+    requested: list[str] = []
+    if isinstance(requested_dataset_ids, (list, tuple, set)):
+        requested = [str(item).strip() for item in requested_dataset_ids if str(item).strip()]
+    elif requested_dataset_ids:
+        requested = [str(requested_dataset_ids).strip()]
+
+    if not requested:
+        requested = [dataset_id for dataset_id in DEFAULT_SELECTED_SKILL_DATASET_IDS if dataset_id in available_ids]
+    if not requested:
+        requested = available_ids[:1]
+
+    normalized: list[str] = []
+    for dataset_id in requested:
+        if dataset_id in available_ids and dataset_id not in normalized:
+            normalized.append(dataset_id)
+    if not normalized:
+        raise ValueError("Select at least one skill dataset.")
+    return normalized
+
+
+def retrieve_skill_entry(
+    question: str,
+    reference_answer: str,
+    corpora: Dict[str, Dict[str, Any]],
+    dataset_ids: list[str],
+) -> Dict[str, Any]:
     query = (question or "").strip()
     if not query:
         raise ValueError("Custom mode requires a non-empty question.")
@@ -778,41 +975,54 @@ def retrieve_skill_entry(question: str, reference_answer: str, corpus: Dict[str,
     if not question_tokens and not answer_tokens:
         raise ValueError("The custom question is too short to retrieve a skill card.")
 
-    entries = corpus.get("entries", [])
-    if not entries:
-        raise ValueError("No DeepMath skill corpus is available for retrieval.")
-
     best_entry: Dict[str, Any] | None = None
     best_score = float("-inf")
     best_overlap: set[str] = set()
+    selected_labels: list[str] = []
 
-    for entry in entries:
-        question_overlap = question_tokens & entry["question_token_set"]
-        answer_overlap = answer_tokens & entry["answer_token_set"]
-        exact_answer_match = bool(normalized_answer) and normalized_answer == entry["normalized_answer"]
-        overlap = question_overlap | answer_overlap
-        if not overlap and not exact_answer_match:
+    for dataset_id in dataset_ids:
+        corpus = corpora.get(dataset_id)
+        if not corpus:
             continue
+        selected_labels.append(corpus["label"])
+        entries = corpus.get("entries", [])
+        for entry in entries:
+            question_overlap = question_tokens & entry["question_token_set"]
+            topic_overlap = question_tokens & entry["topic_token_set"]
+            keyword_overlap = question_tokens & entry["keyword_token_set"]
+            answer_overlap = answer_tokens & entry["answer_token_set"]
+            exact_answer_match = bool(normalized_answer) and normalized_answer == entry["normalized_answer"]
+            overlap = question_overlap | topic_overlap | keyword_overlap | answer_overlap
+            if not overlap and not exact_answer_match:
+                continue
 
-        question_score = sum(corpus["idf"].get(token, 1.0) for token in question_overlap)
-        answer_score = sum(corpus["idf"].get(token, 1.0) for token in answer_overlap)
-        coverage = len(question_overlap) / max(1, len(question_tokens)) if question_tokens else 0.0
-        answer_coverage = len(answer_overlap) / max(1, len(answer_tokens)) if answer_tokens else 0.0
-        density = len(overlap) / max(1, len(entry["combined_token_set"]))
-        score = (
-            question_score * (0.76 + 0.24 * coverage)
-            + answer_score * (1.1 + 0.4 * answer_coverage)
-            + density
-            + entry["skill_score"] * 0.004
-        )
-        if exact_answer_match:
-            score += 2.5
-        if score > best_score:
-            best_score = score
-            best_entry = entry
-            best_overlap = overlap
+            question_score = sum(corpus["idf"].get(token, 1.0) for token in question_overlap)
+            topic_score = 0.55 * sum(corpus["idf"].get(token, 1.0) for token in topic_overlap)
+            keyword_score = 0.85 * sum(corpus["idf"].get(token, 1.0) for token in keyword_overlap)
+            answer_score = 1.1 * sum(corpus["idf"].get(token, 1.0) for token in answer_overlap)
+            question_like_overlap = question_overlap | topic_overlap | keyword_overlap
+            coverage = len(question_like_overlap) / max(1, len(question_tokens)) if question_tokens else 0.0
+            answer_coverage = len(answer_overlap) / max(1, len(answer_tokens)) if answer_tokens else 0.0
+            density = len(overlap) / max(1, len(entry["retrieval_token_set"]))
+            score = (
+                (question_score + topic_score + keyword_score) * (0.76 + 0.24 * coverage)
+                + answer_score * (1.05 + 0.35 * answer_coverage)
+                + density
+                + entry["skill_score"] * 0.004
+            )
+            if exact_answer_match:
+                score += 2.5
+            if score > best_score:
+                best_score = score
+                best_entry = {
+                    **entry,
+                    "dataset_id": dataset_id,
+                    "dataset_label": corpus["label"],
+                }
+                best_overlap = overlap
 
     if best_entry is None:
+        source_label = " + ".join(selected_labels) if selected_labels else "selected skill datasets"
         return {
             "question_id": "",
             "question": "",
@@ -822,7 +1032,9 @@ def retrieve_skill_entry(question: str, reference_answer: str, corpus: Dict[str,
             "skill_text": NO_EXPERIENCE_SKILL_TEXT,
             "skill_score": 0.0,
             "source_key": "no_experience",
-            "source_label": corpus.get("label") or "DeepMath skill archive",
+            "source_label": source_label,
+            "dataset_id": "none",
+            "dataset_label": source_label,
             "retrieval_score": 0.0,
             "matched_tokens": [],
             "no_experience": True,
@@ -845,7 +1057,32 @@ def summarize_custom_question(question: str, limit: int = 76) -> str:
     return first_line[: limit - 1].rstrip() + "…"
 
 
-def build_custom_example(question: str, reference_answer: str, retrieval: Dict[str, Any]) -> Dict[str, Any]:
+def build_preview_example(base_context: Dict[str, Any], retrieval: Dict[str, Any]) -> Dict[str, Any]:
+    question = (base_context.get("question") or "").strip()
+    reference_answer = (base_context.get("answer") or base_context.get("referenceAnswer") or "").strip()
+    source_mode = (base_context.get("sourceMode") or "custom").strip() or "custom"
+    if source_mode == "custom":
+        display_title = summarize_custom_question(question)
+        subtitle = (
+            f"No matching skill card found in {retrieval['source_label']}."
+            if retrieval.get("no_experience")
+            else f"Matched to {retrieval['source_label']}"
+            + (f" · {retrieval['topic']}" if retrieval.get("topic") else "")
+        )
+        highlight = (
+            "No lexical match found. TRS will run without retrieved experience."
+            if retrieval.get("no_experience")
+            else "Skill card retrieved from the selected skill datasets using lexical overlap."
+        )
+    else:
+        display_title = (base_context.get("title") or "Curated Example").strip()
+        subtitle = (base_context.get("subtitle") or "").strip()
+        highlight = (
+            "No matching skill card found in the selected skill datasets."
+            if retrieval.get("no_experience")
+            else f"Retrieved from {retrieval['source_label']}."
+        )
+
     archived_template = {
         "direct": {"verification": "UNKNOWN"},
         "trs": {
@@ -855,29 +1092,23 @@ def build_custom_example(question: str, reference_answer: str, retrieval: Dict[s
         },
     }
     return {
-        "id": "custom-problem",
-        "questionId": "",
-        "title": "Custom Problem",
-        "subtitle": (
-            f"No matching skill card found in {retrieval['source_label']}."
-            if retrieval.get("no_experience")
-            else f"Matched to {retrieval['source_label']}"
-            + (f" · {retrieval['topic']}" if retrieval.get("topic") else "")
-        ),
-        "highlight": (
-            "No lexical match found. TRS will run without retrieved experience."
-            if retrieval.get("no_experience")
-            else "Skill card retrieved from the DeepMath skill archive using lexical overlap."
-        ),
-        "question": question.strip(),
-        "answer": reference_answer.strip(),
-        "topic": "Custom Input",
-        "difficulty": "User",
+        "id": (base_context.get("id") or "custom-problem").strip() or "custom-problem",
+        "questionId": (base_context.get("questionId") or "").strip(),
+        "title": display_title,
+        "subtitle": subtitle,
+        "highlight": highlight,
+        "question": question,
+        "answer": reference_answer,
+        "topic": base_context.get("topic") or ("Custom Input" if source_mode == "custom" else ""),
+        "difficulty": base_context.get("difficulty") or ("User" if source_mode == "custom" else ""),
+        "sourceMode": source_mode,
         "archived": {
             model_id: deepcopy(archived_template)
             for model_id in MODEL_CONFIGS
         },
         "retrieval": {
+            "datasetId": retrieval.get("dataset_id") or "",
+            "datasetLabel": retrieval.get("dataset_label") or retrieval["source_label"],
             "sourceLabel": retrieval["source_label"],
             "matchedQuestion": retrieval["question"],
             "matchedTopic": retrieval.get("topic") or "",
@@ -886,15 +1117,17 @@ def build_custom_example(question: str, reference_answer: str, retrieval: Dict[s
             "score": retrieval["retrieval_score"],
             "noExperience": bool(retrieval.get("no_experience")),
         },
-        "customTitle": summarize_custom_question(question),
+        "skillText": retrieval["skill_text"],
+        "skillScore": retrieval["skill_score"],
     }
 
 
-def serialize_custom_preview(example: Dict[str, Any]) -> Dict[str, Any]:
+def serialize_preview(example: Dict[str, Any]) -> Dict[str, Any]:
     first_archived = next(iter(example["archived"].values()))
     return {
         "id": example["id"],
-        "title": example["customTitle"],
+        "questionId": example.get("questionId") or "",
+        "title": example["title"],
         "subtitle": example["subtitle"],
         "question": example["question"],
         "answer": example["answer"],
@@ -903,6 +1136,8 @@ def serialize_custom_preview(example: Dict[str, Any]) -> Dict[str, Any]:
         "skillText": first_archived["trs"]["skill_text"],
         "skillScore": first_archived["trs"]["skill_score"],
         "retrieval": example["retrieval"],
+        "highlight": example.get("highlight") or "",
+        "sourceMode": example.get("sourceMode") or "custom",
     }
 
 
@@ -1670,15 +1905,29 @@ class DemoHandler(SimpleHTTPRequestHandler):
             self.path = "/index.html"
         return super().do_GET()
 
-    def _build_custom_preview(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_retrieved_preview(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         question = (payload.get("question") or "").strip()
         reference_answer = (payload.get("referenceAnswer") or payload.get("answer") or "").strip()
         if not question:
             raise ValueError("Custom mode requires a question.")
         if not reference_answer:
             raise ValueError("Custom mode requires a reference answer.")
-        retrieval = retrieve_skill_entry(question, reference_answer, self.server.skill_corpus)
-        return build_custom_example(question, reference_answer, retrieval)
+        dataset_ids = resolve_skill_dataset_ids(payload.get("skillDatasetIds"), self.server.skill_corpora)
+        retrieval = retrieve_skill_entry(question, reference_answer, self.server.skill_corpora, dataset_ids)
+        return build_preview_example(
+            {
+                "id": payload.get("id") or "custom-problem",
+                "questionId": payload.get("questionId") or "",
+                "title": payload.get("title") or "",
+                "subtitle": payload.get("subtitle") or "",
+                "topic": payload.get("topic") or "Custom Input",
+                "difficulty": payload.get("difficulty") or "User",
+                "question": question,
+                "answer": reference_answer,
+                "sourceMode": payload.get("sourceMode") or "custom",
+            },
+            retrieval,
+        )
 
     def _resolve_request(self, payload: Dict[str, Any]) -> tuple[Dict[str, Any], ModelConfig]:
         model_id = payload.get("modelId", "")
@@ -1689,20 +1938,14 @@ class DemoHandler(SimpleHTTPRequestHandler):
         if payload.get("question") or payload.get("referenceAnswer") or payload.get("answer"):
             skill_text = (payload.get("skillText") or "").strip()
             skill_score = payload.get("skillScore")
-            custom_preview = self._build_custom_preview(payload)
-            if skill_text:
-                for archived in custom_preview["archived"].values():
+            preview = self._build_retrieved_preview(payload)
+            if "skillText" in payload:
+                for archived in preview["archived"].values():
                     archived["trs"]["skill_text"] = skill_text
                     archived["trs"]["skill_score"] = float(skill_score or 0.0)
-            if payload.get("title"):
-                custom_preview["title"] = str(payload["title"])
-            if payload.get("subtitle"):
-                custom_preview["subtitle"] = str(payload["subtitle"])
-            if payload.get("topic"):
-                custom_preview["topic"] = str(payload["topic"])
-            if payload.get("difficulty"):
-                custom_preview["difficulty"] = payload["difficulty"]
-            return custom_preview, MODEL_CONFIGS[model_id]
+                preview["skillText"] = skill_text
+                preview["skillScore"] = float(skill_score or 0.0)
+            return preview, MODEL_CONFIGS[model_id]
 
         example_id = payload.get("exampleId", "")
         example = self.server.examples_by_id.get(example_id)
@@ -1839,8 +2082,9 @@ class DemoHandler(SimpleHTTPRequestHandler):
             payload = self._read_json_body()
 
             if parsed.path == "/api/retrieve_skill":
-                preview = self._build_custom_preview(payload)
-                self._send_json({"ok": True, "custom": serialize_custom_preview(preview)})
+                preview = self._build_retrieved_preview(payload)
+                serialized = serialize_preview(preview)
+                self._send_json({"ok": True, "preview": serialized, "custom": serialized})
                 return
 
             example, config = self._resolve_request(payload)
@@ -1876,10 +2120,21 @@ class DemoServer(ThreadingHTTPServer):
         payload = load_examples_payload()
         self.examples_payload = payload
         self.examples_by_id = {example["id"]: example for example in payload["examples"]}
-        self.skill_corpus = build_skill_corpus(payload)
-        self.examples_payload["skillCorpus"] = {
-            "docCount": self.skill_corpus["doc_count"],
-            "label": self.skill_corpus["label"],
+        self.skill_corpora = build_skill_corpora(payload)
+        self.examples_payload["skillDatasets"] = {
+            "defaultSelectedIds": list(
+                resolve_skill_dataset_ids(DEFAULT_SELECTED_SKILL_DATASET_IDS, self.skill_corpora)
+            ),
+            "options": [
+                {
+                    "id": option["id"],
+                    "label": option["label"],
+                    "docCount": self.skill_corpora[option["id"]]["doc_count"],
+                    "sourceLabel": self.skill_corpora[option["id"]]["label"],
+                }
+                for option in SKILL_DATASET_OPTIONS
+                if option["id"] in self.skill_corpora
+            ],
         }
 
 
