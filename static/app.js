@@ -59,9 +59,12 @@ const nodes = {
   skillDatasetSummary: document.getElementById("skillDatasetSummary"),
   exampleList: document.getElementById("exampleList"),
   modelCount: document.getElementById("modelCount"),
-  modelGroupGrid: document.getElementById("modelGroupGrid"),
+  currentModelMenu: document.getElementById("currentModelMenu"),
+  currentModelBadge: document.getElementById("currentModelBadge"),
+  currentModelOptions: document.getElementById("currentModelOptions"),
   runButton: document.getElementById("runButton"),
   stopButton: document.getElementById("stopButton"),
+  clearButton: document.getElementById("clearButton"),
   topicBadge: document.getElementById("topicBadge"),
   difficultyBadge: document.getElementById("difficultyBadge"),
   questionTitle: document.getElementById("questionTitle"),
@@ -368,36 +371,12 @@ function familyMeta(familyId) {
 
 function initializeFamilySelections() {
   const models = state.payload.models;
-  const activeModel = models[state.modelId] ? state.modelId : Object.keys(models)[0];
-  const activeFamily = inferFamilyId(activeModel, models[activeModel]);
-  state.selectedFamilyId = activeFamily;
-  state.familySelections = {};
-
-  groupedFamilies().forEach((entries, family) => {
-    const defaultModel =
-      family === activeFamily && entries.some(([modelId]) => modelId === activeModel)
-        ? activeModel
-        : entries[0][0];
-    state.familySelections[family] = defaultModel;
-  });
-
-  state.modelId = activeModel;
+  state.modelId = models[state.modelId] ? state.modelId : Object.keys(models)[0];
 }
 
 function ensureFamilySelections() {
-  if (!Object.keys(state.familySelections).length) {
+  if (!state.payload.models[state.modelId]) {
     initializeFamilySelections();
-  }
-
-  groupedFamilies().forEach((entries, family) => {
-    const current = state.familySelections[family];
-    if (!entries.some(([modelId]) => modelId === current)) {
-      state.familySelections[family] = entries[0][0];
-    }
-  });
-
-  if (!groupedFamilies().has(state.selectedFamilyId)) {
-    state.selectedFamilyId = groupedFamilies().keys().next().value || null;
   }
 }
 
@@ -418,85 +397,47 @@ function renderFamilyIcon(meta) {
 
 function renderModelSelector() {
   ensureFamilySelections();
-  const families = groupedFamilies();
-  const activeFamily = families.has(state.selectedFamilyId)
-    ? state.selectedFamilyId
-    : families.keys().next().value;
-  state.selectedFamilyId = activeFamily;
-  nodes.modelGroupGrid.innerHTML = "";
-  nodes.modelCount.textContent = `${Object.keys(state.payload.models).length} models`;
+  const entries = Object.entries(state.payload.models).sort((a, b) => a[1].label.localeCompare(b[1].label));
+  nodes.modelCount.textContent = `${entries.length} models`;
 
-  families.forEach((entries, family) => {
-    const meta = familyMeta(family);
-    const selectedModelId = state.familySelections[family] || entries[0][0];
-    state.familySelections[family] = selectedModelId;
+  const selectedModel = state.payload.models[state.modelId];
+  const meta = familyMeta(inferFamilyId(state.modelId, selectedModel));
+  nodes.currentModel.textContent = selectedModel?.label || "-";
+  nodes.currentModelBadge.innerHTML = "";
+  nodes.currentModelBadge.appendChild(renderFamilyIcon(meta));
 
-    const card = document.createElement("article");
-    card.className = family === activeFamily ? "model-group-card active" : "model-group-card";
-
-    const head = document.createElement("div");
-    head.className = "model-group-head";
-
-    const brand = document.createElement("div");
-    brand.className = "model-group-brand";
-    brand.appendChild(renderFamilyIcon(meta));
-
-    const copy = document.createElement("div");
-    copy.className = "model-group-copy";
-    const title = document.createElement("strong");
-    title.textContent = meta.label;
-    copy.append(title);
-
-    head.append(brand, copy);
-
-    const label = document.createElement("label");
-    label.className = "sr-only";
-    label.setAttribute("for", `model-select-${family}`);
-    label.textContent = `Select ${meta.label} model`;
-
-    const select = document.createElement("select");
-    select.id = `model-select-${family}`;
-    select.className = "model-group-select";
-
-    entries.forEach(([modelId, model]) => {
-      const option = document.createElement("option");
-      option.value = modelId;
-      option.textContent = model.label;
-      select.appendChild(option);
-    });
-
-    select.value = selectedModelId;
-    const activateFamily = (modelId = select.value) => {
-      const wasActiveFamily = state.selectedFamilyId === family;
-      const wasActiveModel = state.modelId === modelId;
-      state.selectedFamilyId = family;
-      state.familySelections[family] = modelId;
-      state.modelId = modelId;
-      if (!wasActiveFamily || !wasActiveModel) {
-        renderModelSelector();
-        renderSelection();
+  nodes.currentModelOptions.innerHTML = "";
+  entries.forEach(([modelId, model]) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = modelId === state.modelId ? "current-model-option active" : "current-model-option";
+    option.addEventListener("click", () => {
+      if (modelId === state.modelId) {
+        nodes.currentModelMenu.open = false;
+        return;
+      }
+      if (state.running || state.streamAbortController) {
+        clearComparison("Switched model. Previous run cleared.");
+      } else {
         clearLiveResults();
       }
-    };
-
-    head.addEventListener("click", () => {
-      activateFamily(select.value);
-    });
-    select.addEventListener("focus", () => {
-      activateFamily(select.value);
-    });
-    select.addEventListener("click", () => {
-      activateFamily(select.value);
-    });
-    select.addEventListener("change", (event) => {
-      activateFamily(event.target.value);
+      state.modelId = modelId;
+      renderModelSelector();
+      renderSelection();
+      nodes.currentModelMenu.open = false;
     });
 
-    card.append(head, label, select);
-    nodes.modelGroupGrid.appendChild(card);
+    const badge = document.createElement("span");
+    badge.className = "current-model-option-badge";
+    badge.appendChild(renderFamilyIcon(familyMeta(inferFamilyId(modelId, model))));
+
+    const text = document.createElement("span");
+    text.className = "current-model-option-text";
+    text.textContent = model.label;
+
+    option.append(badge, text);
+    nodes.currentModelOptions.appendChild(option);
   });
-
-  state.modelId = state.familySelections[activeFamily];
 }
 
 function initializeVerifierSelection() {
@@ -1144,7 +1085,6 @@ function renderSelection() {
   renderBenchmarkHint(problem);
   nodes.questionText.textContent = problem.question;
   nodes.referenceAnswer.textContent = problem.answer;
-  nodes.currentModel.textContent = state.payload.models[state.modelId]?.label || "-";
   if (state.verifierModelId) {
     nodes.verifierModel.value = state.verifierModelId;
   }
@@ -1236,7 +1176,7 @@ function clearLiveResults() {
   nodes.liveSummary.classList.add("hidden");
   nodes.liveSummary.innerHTML = "";
   resetLanePanels();
-  nodes.runStatus.textContent = "Press run to compare direct prompting against TRS on the selected problem.";
+  nodes.runStatus.textContent = "Press Run to compare direct prompting against TRS on the selected problem.";
 }
 
 function metricRow(label, value, tone = "") {
@@ -1450,7 +1390,18 @@ function seedLaneFallback(lane) {
   setLaneStreaming(lane, false);
 }
 
-function stopAndClearRun() {
+function resetRunControls() {
+  nodes.runButton.disabled = false;
+  nodes.runButton.textContent = "Run";
+  nodes.stopButton.disabled = true;
+}
+
+function stopRun() {
+  const hadActiveRun = Boolean(state.running || state.streamAbortController);
+  if (!hadActiveRun) {
+    nodes.runStatus.textContent = "No active run to stop.";
+    return;
+  }
   state.activeRunId += 1;
   state.userStopped = true;
   state.streamError = null;
@@ -1463,11 +1414,33 @@ function stopAndClearRun() {
   }
   state.streamAbortController = null;
   state.running = false;
+  setLaneStreaming("direct", false);
+  setLaneStreaming("trs", false);
+  resetRunControls();
+  nodes.runStatus.textContent = "Run stopped. Partial output is preserved until you clear it.";
+}
+
+function clearComparison(message = "Results cleared. Choose a problem and model, then click Run.") {
+  const hadActiveRun = Boolean(state.running || state.streamAbortController);
+  if (hadActiveRun) {
+    state.activeRunId += 1;
+    state.userStopped = true;
+    state.streamError = null;
+    state.streamSawLaneOutput = false;
+    state.streamProgress = { direct: false, trs: false };
+    state.laneRecovering = { direct: false, trs: false };
+    state.laneAttempts = { direct: 1, trs: 1 };
+    if (state.streamAbortController) {
+      state.streamAbortController.abort();
+    }
+    state.streamAbortController = null;
+    state.running = false;
+    setLaneStreaming("direct", false);
+    setLaneStreaming("trs", false);
+  }
   clearLiveResults();
-  nodes.runStatus.textContent = "Run stopped and cleared. You can switch models or start a new run.";
-  nodes.runButton.disabled = false;
-  nodes.runButton.textContent = "Run Live Comparison";
-  nodes.stopButton.disabled = true;
+  resetRunControls();
+  nodes.runStatus.textContent = hadActiveRun ? "Run cleared." : message;
 }
 
 function handleStreamEvent(eventName, payload) {
@@ -1731,7 +1704,7 @@ async function runComparison() {
   state.activeModel = state.payload.models[state.modelId];
   state.streamAbortController = new AbortController();
   nodes.runButton.disabled = true;
-  nodes.runButton.textContent = "Streaming...";
+  nodes.runButton.textContent = "Running...";
   nodes.stopButton.disabled = false;
   setLaneStreaming("direct", true);
   setLaneStreaming("trs", true);
@@ -1788,9 +1761,7 @@ async function runComparison() {
     state.running = false;
     state.streamAbortController = null;
     state.userStopped = false;
-    nodes.runButton.disabled = false;
-    nodes.runButton.textContent = "Run Live Comparison";
-    nodes.stopButton.disabled = true;
+    resetRunControls();
   }
 }
 
@@ -1818,7 +1789,8 @@ async function boot() {
   clearLiveResults();
   updateCustomApplyState();
   nodes.runButton.addEventListener("click", runComparison);
-  nodes.stopButton.addEventListener("click", stopAndClearRun);
+  nodes.stopButton.addEventListener("click", stopRun);
+  nodes.clearButton.addEventListener("click", () => clearComparison());
   nodes.examplesModeButton.addEventListener("click", () => {
     setSourceMode("example");
     clearLiveResults();
