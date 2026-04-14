@@ -588,8 +588,6 @@ function renderModelSelector() {
       }
       if (state.running || state.streamAbortController) {
         clearComparison("Switched model. Previous run cleared.");
-      } else {
-        clearLiveResults();
       }
       state.modelId = modelId;
       renderModelSelector();
@@ -2007,7 +2005,9 @@ async function boot() {
   nodes.customAnswer.addEventListener("input", markCustomDirty);
   nodes.verifierModel.addEventListener("change", (event) => {
     state.verifierModelId = event.target.value;
-    clearLiveResults();
+    if (state.running || state.streamAbortController) {
+      clearComparison("Switched verifier model. Previous run cleared.");
+    }
   });
   nodes.stopButton.disabled = true;
   await prepareExamplePreview({ clearResults: false });
