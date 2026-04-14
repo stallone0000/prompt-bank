@@ -681,6 +681,20 @@ def load_examples_payload() -> Dict[str, Any]:
     with DATA_PATH.open("r", encoding="utf-8") as f:
         payload = json.load(f)
 
+    deepmath_examples = payload.get("examples", [])
+    if deepmath_examples:
+        preferred_order = {
+            "random-walk-bound": -100,
+            "bisector-angle": 100,
+        }
+        payload["examples"] = sorted(
+            deepmath_examples,
+            key=lambda example: (
+                preferred_order.get(example.get("id", ""), 0),
+                deepmath_examples.index(example),
+            ),
+        )
+
     groups: list[Dict[str, Any]] = []
     for example in payload.get("examples", []):
         archived_by_model = example.get("archived", {})
