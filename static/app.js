@@ -1536,14 +1536,12 @@ function appendLaneDelta(lane, kind, text) {
       setTraceContent(laneNode.reasoning, "", { highlightHints: laneNode.highlightHints });
     }
     appendTraceContent(laneNode.reasoning, text, { highlightHints: laneNode.highlightHints });
-    scheduleTypesetMath([laneNode.reasoning]);
     return;
   }
   if ((laneNode.answer.dataset.rawText || "").startsWith("(")) {
     setTraceContent(laneNode.answer, "", { highlightHints: laneNode.highlightHints });
   }
   appendTraceContent(laneNode.answer, text, { highlightHints: laneNode.highlightHints });
-  scheduleTypesetMath([laneNode.answer]);
 }
 
 function seedLaneFallback(lane) {
