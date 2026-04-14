@@ -115,6 +115,10 @@ a {
   font-weight: 700;
 }
 
+.topbar-accent-run {
+  color: var(--accent);
+}
+
 .topbar-meta {
   display: flex;
   align-items: center;
@@ -297,7 +301,7 @@ a {
 }
 
 .sidebar-section-title {
-  color: var(--hero-accent);
+  color: var(--accent);
   font-size: 1.22rem;
   line-height: 1.1;
   font-weight: 700;
@@ -320,10 +324,12 @@ a {
 .mode-card:hover,
 .mode-card.active {
   border-color: rgba(16, 163, 127, 0.3);
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .mode-card.active {
+  border-width: 2px;
+  border-color: var(--accent);
   transform: translateY(-1px);
 }
 
@@ -708,7 +714,7 @@ a {
 }
 
 .accent-label {
-  color: var(--hero-accent);
+  color: var(--accent);
 }
 
 .model-picker-shell {
