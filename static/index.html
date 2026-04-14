@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
@@ -145,6 +145,9 @@
                 <p id="benchmarkHint" class="benchmark-hint hidden" aria-live="polite"></p>
               </div>
               <div class="question-body">
+                <div class="question-body-head">
+                  <button class="copy-button" type="button" data-copy-target="questionText">Copy</button>
+                </div>
                 <div id="questionText" class="question-text"></div>
                 <div class="answer-strip">
                   <span>Reference answer</span>
@@ -176,11 +179,17 @@
                 </div>
                 <div id="directMetrics" class="metrics-grid"></div>
                 <details class="trace-panel">
-                  <summary><span class="trace-summary-copy">Chain of thought (if exposed)</span></summary>
+                  <summary>
+                    <span class="trace-summary-copy">Chain of thought (if exposed)</span>
+                    <button class="copy-button trace-copy-button" type="button" data-copy-target="directReasoning">Copy</button>
+                  </summary>
                   <pre id="directReasoning"></pre>
                 </details>
                 <details class="trace-panel">
-                  <summary><span class="trace-summary-copy">Response</span></summary>
+                  <summary>
+                    <span class="trace-summary-copy">Response</span>
+                    <button class="copy-button trace-copy-button" type="button" data-copy-target="directAnswer">Copy</button>
+                  </summary>
                   <pre id="directAnswer"></pre>
                 </details>
               </article>
@@ -192,11 +201,17 @@
                 </div>
                 <div id="trsMetrics" class="metrics-grid"></div>
                 <details class="trace-panel">
-                  <summary><span class="trace-summary-copy">Chain of thought (if exposed)</span></summary>
+                  <summary>
+                    <span class="trace-summary-copy">Chain of thought (if exposed)</span>
+                    <button class="copy-button trace-copy-button" type="button" data-copy-target="trsReasoning">Copy</button>
+                  </summary>
                   <pre id="trsReasoning"></pre>
                 </details>
                 <details class="trace-panel">
-                  <summary><span class="trace-summary-copy">Response</span></summary>
+                  <summary>
+                    <span class="trace-summary-copy">Response</span>
+                    <button class="copy-button trace-copy-button" type="button" data-copy-target="trsAnswer">Copy</button>
+                  </summary>
                   <pre id="trsAnswer"></pre>
                 </details>
               </article>

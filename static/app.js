@@ -255,6 +255,80 @@ function appendTraceContent(node, text, { highlightHints = false } = {}) {
   setTraceContent(node, nextText, { highlightHints });
 }
 
+async function copyPlainText(text) {
+  const value = String(text || "");
+  if (!value) {
+    return false;
+  }
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+
+  const helper = document.createElement("textarea");
+  helper.value = value;
+  helper.setAttribute("readonly", "readonly");
+  helper.style.position = "fixed";
+  helper.style.opacity = "0";
+  document.body.appendChild(helper);
+  helper.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(helper);
+  return copied;
+}
+
+function readCopySource(targetId) {
+  const node = document.getElementById(targetId);
+  if (!node) {
+    return "";
+  }
+  if (typeof node.dataset?.rawText === "string" && node.dataset.rawText.length) {
+    return node.dataset.rawText;
+  }
+  return node.textContent || "";
+}
+
+function flashCopyButton(button, label, copied = false) {
+  if (!button.dataset.defaultLabel) {
+    button.dataset.defaultLabel = button.textContent.trim() || "Copy";
+  }
+  button.textContent = label;
+  button.classList.toggle("copied", copied);
+  if (button._copyFlashTimer) {
+    window.clearTimeout(button._copyFlashTimer);
+  }
+  button._copyFlashTimer = window.setTimeout(() => {
+    button.textContent = button.dataset.defaultLabel;
+    button.classList.remove("copied");
+  }, copied ? 1200 : 900);
+}
+
+function initializeCopyButtons() {
+  document.querySelectorAll(".copy-button[data-copy-target]").forEach((button) => {
+    if (button.dataset.copyBound === "true") {
+      return;
+    }
+    button.dataset.copyBound = "true";
+    button.dataset.defaultLabel = button.textContent.trim() || "Copy";
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const text = readCopySource(button.dataset.copyTarget);
+      if (!text.trim()) {
+        flashCopyButton(button, "Empty");
+        return;
+      }
+      try {
+        await copyPlainText(text);
+        flashCopyButton(button, "Copied", true);
+      } catch (error) {
+        flashCopyButton(button, "Failed");
+      }
+    });
+  });
+}
+
 function normalizeLookupValue(value) {
   return String(value || "").toLowerCase();
 }
@@ -1064,26 +1138,13 @@ function renderSelection() {
   if (!problem) {
     return;
   }
-  const isCustom = state.sourceMode === "custom";
-  const isResolvedCustom = isCustom && state.customContext && !state.customDirty;
-  nodes.topicBadge.textContent = isCustom
-    ? "Custom Input"
-    : problem.topic.split(" -> ").slice(-2).join(" • ");
-  nodes.difficultyBadge.textContent = isCustom
-    ? isResolvedCustom
-      ? problem.retrieval?.noExperience
-        ? "No Experience"
-        : "Retrieved Skill"
-      : state.customLookupPending
-        ? "Searching"
-        : "Awaiting Retrieval"
-    : Number.isFinite(Number(problem.difficulty))
-      ? `Difficulty ${problem.difficulty}`
-      : String(problem.difficulty || "Curated");
+  nodes.topicBadge.textContent = "";
+  nodes.difficultyBadge.textContent = "";
   nodes.questionTitle.textContent = problem.title;
-  nodes.questionSubtitle.textContent = problem.subtitle;
+  nodes.questionSubtitle.textContent = "";
   renderBenchmarkHint(problem);
   nodes.questionText.textContent = problem.question;
+  nodes.questionText.dataset.rawText = problem.question;
   nodes.referenceAnswer.textContent = problem.answer;
   if (state.verifierModelId) {
     nodes.verifierModel.value = state.verifierModelId;
@@ -1783,6 +1844,7 @@ async function boot() {
   updateSkillDatasetMeta();
   renderModelSelector();
   renderVerifierSelector();
+  initializeCopyButtons();
   renderSourcePanels();
   renderExamples();
   renderSelection();
