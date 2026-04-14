@@ -44,6 +44,10 @@ const state = {
 
 const STREAM_CONNECT_MAX_RETRIES = 4;
 const RUN_RESTART_MAX_RETRIES = 3;
+const TYPESET_DEBOUNCE_MS = 140;
+
+let pendingTypesetTimer = 0;
+const pendingTypesetTargets = new Set();
 
 const nodes = {
   examplesModeButton: document.getElementById("examplesModeButton"),
@@ -207,6 +211,43 @@ function typesetMath(targets = []) {
   }
   window.MathJax.typesetClear(targets);
   window.MathJax.typesetPromise(targets).catch(() => {});
+}
+
+function scheduleTypesetMath(targets = []) {
+  targets.filter(Boolean).forEach((target) => pendingTypesetTargets.add(target));
+  if (!pendingTypesetTargets.size || pendingTypesetTimer) {
+    return;
+  }
+  pendingTypesetTimer = window.setTimeout(() => {
+    pendingTypesetTimer = 0;
+    const batch = Array.from(pendingTypesetTargets);
+    pendingTypesetTargets.clear();
+    typesetMath(batch);
+  }, TYPESET_DEBOUNCE_MS);
+}
+
+function snapshotExampleScroll() {
+  return {
+    windowX: window.scrollX,
+    windowY: window.scrollY,
+    panelTop: nodes.examplesPanel?.scrollTop ?? 0,
+    listTop: nodes.exampleList?.scrollTop ?? 0,
+  };
+}
+
+function restoreExampleScroll(snapshot) {
+  if (!snapshot) {
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    if (nodes.examplesPanel) {
+      nodes.examplesPanel.scrollTop = snapshot.panelTop;
+    }
+    if (nodes.exampleList) {
+      nodes.exampleList.scrollTop = snapshot.listTop;
+    }
+    window.scrollTo(snapshot.windowX, snapshot.windowY);
+  });
 }
 
 function escapeHtml(value) {
@@ -1119,10 +1160,12 @@ function renderExampleGroupCard(group, options = {}) {
 }
 
 function renderExamples() {
+  const scrollSnapshot = snapshotExampleScroll();
   nodes.exampleList.innerHTML = "";
   sidebarExampleGroups().forEach((group) => {
     nodes.exampleList.appendChild(renderExampleGroupCard(group));
   });
+  restoreExampleScroll(scrollSnapshot);
 }
 
 function renderSelection() {
@@ -1141,8 +1184,9 @@ function renderSelection() {
   if (state.verifierModelId) {
     nodes.verifierModel.value = state.verifierModelId;
   }
-  nodes.skillCard.textContent =
-    problem.skillText || problem.archived?.[state.modelId]?.trs?.skill_text || "(No skill card retrieved yet.)";
+  const skillText = problem.skillText || problem.archived?.[state.modelId]?.trs?.skill_text || "(No skill card retrieved yet.)";
+  nodes.skillCard.textContent = skillText;
+  nodes.skillCard.dataset.rawText = skillText;
   nodes.skillCardSource.textContent = problem.retrieval?.datasetLabel ? `· ${problem.retrieval.datasetLabel}` : "";
   typesetMath([nodes.questionText, nodes.referenceAnswer, nodes.skillCard]);
 }
@@ -1423,12 +1467,14 @@ function appendLaneDelta(lane, kind, text) {
       setTraceContent(laneNode.reasoning, "", { highlightHints: laneNode.highlightHints });
     }
     appendTraceContent(laneNode.reasoning, text, { highlightHints: laneNode.highlightHints });
+    scheduleTypesetMath([laneNode.reasoning]);
     return;
   }
   if ((laneNode.answer.dataset.rawText || "").startsWith("(")) {
     setTraceContent(laneNode.answer, "", { highlightHints: laneNode.highlightHints });
   }
   appendTraceContent(laneNode.answer, text, { highlightHints: laneNode.highlightHints });
+  scheduleTypesetMath([laneNode.answer]);
 }
 
 function seedLaneFallback(lane) {
