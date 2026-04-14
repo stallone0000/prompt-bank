@@ -227,11 +227,16 @@ function scheduleTypesetMath(targets = []) {
 }
 
 function snapshotExampleScroll() {
+  const stackTops = {};
+  document.querySelectorAll(".example-option-stack[data-group-id]").forEach((stack) => {
+    stackTops[stack.dataset.groupId] = stack.scrollTop;
+  });
   return {
     windowX: window.scrollX,
     windowY: window.scrollY,
     panelTop: nodes.examplesPanel?.scrollTop ?? 0,
     listTop: nodes.exampleList?.scrollTop ?? 0,
+    stackTops,
   };
 }
 
@@ -246,6 +251,12 @@ function restoreExampleScroll(snapshot) {
     if (nodes.exampleList) {
       nodes.exampleList.scrollTop = snapshot.listTop;
     }
+    Object.entries(snapshot.stackTops || {}).forEach(([groupId, scrollTop]) => {
+      const stack = document.querySelector(`.example-option-stack[data-group-id="${groupId}"]`);
+      if (stack) {
+        stack.scrollTop = scrollTop;
+      }
+    });
     window.scrollTo(snapshot.windowX, snapshot.windowY);
   });
 }
@@ -266,7 +277,8 @@ function formatHintKeywords(line) {
   let match;
   while ((match = pattern.exec(line))) {
     html += escapeHtml(line.slice(cursor, match.index));
-    html += `<strong class="trace-hint-keyword">${escapeHtml(match[0])}</strong>`;
+    const replacement = /s$/i.test(match[0]) ? "skills" : "skill";
+    html += `<strong class="trace-hint-keyword">${replacement}</strong>`;
     cursor = match.index + match[0].length;
   }
   html += escapeHtml(line.slice(cursor));
@@ -1049,6 +1061,7 @@ function renderExampleGroupCard(group, options = {}) {
 
   const card = document.createElement("article");
   card.className = nested ? "example-group-card nested" : "example-group-card";
+  card.dataset.groupId = groupId;
   if (active) {
     card.classList.add("active");
   }
@@ -1125,12 +1138,14 @@ function renderExampleGroupCard(group, options = {}) {
     } else {
       const stack = document.createElement("div");
       stack.className = "example-option-stack";
+      stack.dataset.groupId = groupId;
 
       group.options.forEach((option, index) => {
         const optionButton = document.createElement("button");
         optionButton.type = "button";
         optionButton.className = option.id === state.exampleId ? "example-option-card active" : "example-option-card";
         optionButton.addEventListener("click", () => {
+          optionButton.blur();
           state.exampleId = option.id;
           nodes.customStatus.textContent = "Switch back to Custom Problem to search the selected skill datasets.";
           setSourceMode("example");

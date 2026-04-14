@@ -1239,7 +1239,7 @@ a {
 
 .question-text,
 .skill-card,
-.trace-panel pre {
+.trace-body {
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1533,7 +1533,7 @@ a {
   flex: 0 0 auto;
 }
 
-.trace-panel pre {
+.trace-body {
   margin: 0;
   padding: 0 14px 14px;
   font-family: inherit;
@@ -1541,11 +1541,11 @@ a {
   line-height: 1.42;
 }
 
-.trace-panel pre mjx-container {
+.trace-body mjx-container {
   font-size: 0.95em !important;
 }
 
-.trace-panel pre mjx-container[display="true"] {
+.trace-body mjx-container[display="true"] {
   margin: 0.45em 0 !important;
 }
 
@@ -1561,7 +1561,7 @@ a {
   }
 }
 
-.trace-panel pre.streaming::after {
+.trace-body.streaming::after {
   content: "▋";
   margin-left: 3px;
   color: var(--accent);
