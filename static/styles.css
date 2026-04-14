@@ -1536,8 +1536,16 @@ a {
 .trace-panel pre {
   margin: 0;
   padding: 0 14px 14px;
-  font-size: 0.9rem;
-  line-height: 1.66;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.trace-panel pre mjx-container {
+  font-size: 0.95em !important;
+}
+
+.trace-panel pre mjx-container[display="true"] {
+  margin: 0.45em 0 !important;
 }
 
 .trace-hint-keyword {
