@@ -1550,8 +1550,11 @@ a {
 }
 
 .trace-hint-keyword {
-  color: var(--danger);
   font-weight: 700;
+}
+
+.trace-hint-sentence {
+  color: var(--danger);
 }
 
 @media (max-width: 900px) {

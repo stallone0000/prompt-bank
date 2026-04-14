@@ -206,11 +206,28 @@ function sleep(ms) {
 }
 
 function typesetMath(targets = []) {
-  if (!window.MathJax || !window.MathJax.typesetPromise) {
+  const filteredTargets = targets.filter(Boolean);
+  filteredTargets.forEach((target) => pendingTypesetTargets.add(target));
+  if (pendingTypesetTimer) {
     return;
   }
-  window.MathJax.typesetClear(targets);
-  window.MathJax.typesetPromise(targets).catch(() => {});
+  if (!pendingTypesetTargets.size) {
+    return;
+  }
+  pendingTypesetTimer = window.setTimeout(() => {
+    pendingTypesetTimer = 0;
+    if (!pendingTypesetTargets.size) {
+      return;
+    }
+    if (!window.MathJax || !window.MathJax.typesetPromise) {
+      scheduleTypesetMath();
+      return;
+    }
+    const batch = Array.from(pendingTypesetTargets);
+    pendingTypesetTargets.clear();
+    window.MathJax.typesetClear(batch);
+    window.MathJax.typesetPromise(batch).catch(() => {});
+  }, 0);
 }
 
 function scheduleTypesetMath(targets = []) {
@@ -220,6 +237,10 @@ function scheduleTypesetMath(targets = []) {
   }
   pendingTypesetTimer = window.setTimeout(() => {
     pendingTypesetTimer = 0;
+    if (!window.MathJax || !window.MathJax.typesetPromise) {
+      scheduleTypesetMath();
+      return;
+    }
     const batch = Array.from(pendingTypesetTargets);
     pendingTypesetTargets.clear();
     typesetMath(batch);
@@ -285,16 +306,38 @@ function formatHintKeywords(line) {
   return html;
 }
 
+function renderHintSentenceHtml(text) {
+  const sentenceBoundary = /([.!?;:。！？；：]+(?:["'”’)\]]*)\s*|\n+)/g;
+  let cursor = 0;
+  let html = "";
+  let match;
+  while ((match = sentenceBoundary.exec(text))) {
+    const end = match.index + match[0].length;
+    const sentence = text.slice(cursor, end);
+    if (/\bhints?\b/i.test(sentence)) {
+      html += `<span class="trace-hint-sentence">${formatHintKeywords(sentence)}</span>`;
+    } else {
+      html += escapeHtml(sentence);
+    }
+    cursor = end;
+  }
+  const tail = text.slice(cursor);
+  if (tail) {
+    if (/\bhints?\b/i.test(tail)) {
+      html += `<span class="trace-hint-sentence">${formatHintKeywords(tail)}</span>`;
+    } else {
+      html += escapeHtml(tail);
+    }
+  }
+  return html;
+}
+
 function renderTraceHtml(text, highlightHints = false) {
-  return String(text || "")
-    .split("\n")
-    .map((line) => {
-      if (highlightHints && /\bhints?\b/i.test(line)) {
-        return formatHintKeywords(line);
-      }
-      return escapeHtml(line);
-    })
-    .join("\n");
+  const raw = String(text || "");
+  if (!highlightHints) {
+    return escapeHtml(raw);
+  }
+  return renderHintSentenceHtml(raw);
 }
 
 function setTraceContent(node, text, { highlightHints = false } = {}) {
@@ -863,6 +906,9 @@ function setSourceMode(mode) {
   } else {
     cancelExampleLookup();
   }
+  if (mode !== state.sourceMode) {
+    resetForProblemChange();
+  }
   state.sourceMode = mode;
   renderSourcePanels();
   renderExamples();
@@ -1000,6 +1046,14 @@ async function prepareCustomProblem(options = {}) {
   state.customLookupRequestId = requestId;
   if (state.customLookupAbortController) {
     state.customLookupAbortController.abort();
+  }
+  const problemChanged =
+    state.sourceMode !== "custom" ||
+    !state.customContext ||
+    state.customContext.question !== question ||
+    state.customContext.answer !== answer;
+  if (problemChanged) {
+    resetForProblemChange("Current problem changed. Previous run cleared.");
   }
   const controller = new AbortController();
   state.customLookupAbortController = controller;
@@ -1145,11 +1199,13 @@ function renderExampleGroupCard(group, options = {}) {
         optionButton.type = "button";
         optionButton.className = option.id === state.exampleId ? "example-option-card active" : "example-option-card";
         optionButton.addEventListener("click", () => {
+          if (option.id !== state.exampleId || state.sourceMode !== "example") {
+            resetForProblemChange("Current problem changed. Previous run cleared.");
+          }
           optionButton.blur();
           state.exampleId = option.id;
           nodes.customStatus.textContent = "Switch back to Custom Problem to search the selected skill datasets.";
           setSourceMode("example");
-          clearLiveResults();
           prepareExamplePreview({ clearResults: false }).catch((error) => {
             nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
           });
@@ -1557,6 +1613,29 @@ function clearComparison(message = "Results cleared. Choose a problem and model,
   nodes.runStatus.textContent = hadActiveRun ? "Run cleared." : message;
 }
 
+function resetForProblemChange(message = "Current problem changed. Previous run cleared.") {
+  const hadActiveRun = Boolean(state.running || state.streamAbortController);
+  if (hadActiveRun) {
+    state.activeRunId += 1;
+    state.userStopped = true;
+    state.streamError = null;
+    state.streamSawLaneOutput = false;
+    state.streamProgress = { direct: false, trs: false };
+    state.laneRecovering = { direct: false, trs: false };
+    state.laneAttempts = { direct: 1, trs: 1 };
+    if (state.streamAbortController) {
+      state.streamAbortController.abort();
+    }
+    state.streamAbortController = null;
+    state.running = false;
+    setLaneStreaming("direct", false);
+    setLaneStreaming("trs", false);
+  }
+  clearLiveResults();
+  resetRunControls();
+  nodes.runStatus.textContent = message;
+}
+
 function handleStreamEvent(eventName, payload) {
   if (payload?.runId != null && payload.runId !== state.activeRunId) {
     return false;
@@ -1908,7 +1987,6 @@ async function boot() {
   nodes.clearButton.addEventListener("click", () => clearComparison());
   nodes.examplesModeButton.addEventListener("click", () => {
     setSourceMode("example");
-    clearLiveResults();
     prepareExamplePreview({ clearResults: false }).catch((error) => {
       nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
     });
