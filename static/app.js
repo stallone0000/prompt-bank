@@ -6,7 +6,7 @@ const state = {
   selectedFamilyId: null,
   familySelections: {},
   exampleId: null,
-  openExampleGroupId: null,
+  openExampleGroupIds: [],
   examplePreviewCache: {},
   exampleLookupPending: false,
   exampleLookupRequestId: 0,
@@ -56,6 +56,7 @@ const nodes = {
   customCorpusMeta: document.getElementById("customCorpusMeta"),
   customStatus: document.getElementById("customStatus"),
   skillDatasetControls: document.getElementById("skillDatasetControls"),
+  skillDatasetSummary: document.getElementById("skillDatasetSummary"),
   exampleList: document.getElementById("exampleList"),
   modelCount: document.getElementById("modelCount"),
   modelGroupGrid: document.getElementById("modelGroupGrid"),
@@ -544,12 +545,14 @@ function updateSkillDatasetMeta() {
   const selected = selectedSkillDatasets();
   if (!selected.length) {
     nodes.customCorpusMeta.textContent = "Select at least one skill dataset.";
+    nodes.skillDatasetSummary.textContent = "Select";
     return;
   }
 
   const totalDocCount = selected.reduce((sum, option) => sum + (option.docCount || 0), 0);
   const label = selected.map((option) => option.label).join(" + ");
   nodes.customCorpusMeta.textContent = `Live retrieval over ${formatNumber(totalDocCount)} skill cards from ${label}.`;
+  nodes.skillDatasetSummary.textContent = selected.length === 1 ? selected[0].label : `${selected.length} selected`;
 }
 
 function renderSkillDatasetControls() {
@@ -623,8 +626,65 @@ function exampleGroupId(group) {
   return group.id || group.label;
 }
 
+function groupOptionIds(group) {
+  if (group.optionIds?.length) {
+    return group.optionIds;
+  }
+  if (group.children?.length) {
+    return group.children.flatMap((child) => groupOptionIds(child));
+  }
+  return (group.options || []).map((option) => option.id);
+}
+
+function groupContainsExample(group, exampleId = state.exampleId) {
+  return groupOptionIds(group).includes(exampleId);
+}
+
 function groupSelectedOption(group) {
   return group.options.find((option) => option.id === state.exampleId) || group.options[0] || null;
+}
+
+function isExampleGroupOpen(groupId) {
+  return state.openExampleGroupIds.includes(groupId);
+}
+
+function toggleExampleGroup(groupId) {
+  if (isExampleGroupOpen(groupId)) {
+    state.openExampleGroupIds = state.openExampleGroupIds.filter((id) => id !== groupId);
+  } else {
+    state.openExampleGroupIds = [...state.openExampleGroupIds, groupId];
+  }
+}
+
+function closeExampleGroups() {
+  state.openExampleGroupIds = [];
+}
+
+function sidebarExampleGroups() {
+  const groups = state.payload?.exampleGroups || [];
+  const curated = [];
+  const benchmarks = [];
+  groups.forEach((group) => {
+    if (group.kind === "benchmark") {
+      benchmarks.push(group);
+    } else {
+      curated.push(group);
+    }
+  });
+
+  const sections = [...curated];
+  if (benchmarks.length) {
+    sections.push({
+      id: "math-benchmarks",
+      kind: "benchmark-folder",
+      label: "Math Benchmarks",
+      subtitle: "Open HMMT and AIME benchmark sets.",
+      options: benchmarks.flatMap((group) => group.options || []),
+      optionIds: benchmarks.flatMap((group) => groupOptionIds(group)),
+      children: benchmarks,
+    });
+  }
+  return sections;
 }
 
 function cancelExampleLookup() {
@@ -924,83 +984,96 @@ async function prepareCustomProblem(options = {}) {
   }
 }
 
-function renderExamples() {
-  nodes.exampleList.innerHTML = "";
-  (state.payload.exampleGroups || []).forEach((group) => {
-    const groupId = exampleGroupId(group);
-    const card = document.createElement("article");
-    const active = (group.optionIds || group.options.map((option) => option.id)).includes(state.exampleId);
-    const open = state.openExampleGroupId === groupId;
-    card.className = "example-group-card";
-    if (active) {
-      card.classList.add("active");
-    }
-    if (open) {
-      card.classList.add("open");
-    }
+function renderExampleGroupCard(group, options = {}) {
+  const { nested = false } = options;
+  const groupId = exampleGroupId(group);
+  const active = groupContainsExample(group);
+  const open = isExampleGroupOpen(groupId);
+  const isFolder = group.kind === "benchmark-folder";
 
-    const header = document.createElement("div");
-    header.className = "example-group-header";
+  const card = document.createElement("article");
+  card.className = nested ? "example-group-card nested" : "example-group-card";
+  if (active) {
+    card.classList.add("active");
+  }
+  if (open) {
+    card.classList.add("open");
+  }
 
-    const copy = document.createElement("div");
-    copy.className = "example-group-copy";
+  const header = document.createElement("div");
+  header.className = "example-group-header";
 
-    const top = document.createElement("div");
-    top.className = "example-group-topline";
+  const copy = document.createElement("div");
+  copy.className = "example-group-copy";
 
-    const kicker = document.createElement("span");
-    kicker.className = "example-group-kicker";
-    kicker.textContent = group.kind === "benchmark" ? "Benchmark" : "Curated";
+  const top = document.createElement("div");
+  top.className = "example-group-topline";
 
-    const count = document.createElement("span");
-    count.className = "example-group-count";
-    count.textContent = `${group.options.length} problems`;
+  const kicker = document.createElement("span");
+  kicker.className = "example-group-kicker";
+  kicker.textContent = isFolder ? "Collection" : group.kind === "benchmark" ? "Benchmark" : "Example";
 
-    const title = document.createElement("strong");
-    title.className = "example-group-title";
-    title.textContent = group.label;
+  const count = document.createElement("span");
+  count.className = "example-group-count";
+  count.textContent = `${groupOptionIds(group).length} problems`;
 
-    const subtitle = document.createElement("div");
-    subtitle.className = "example-group-subtitle";
-    subtitle.textContent = group.subtitle || "";
+  const title = document.createElement("strong");
+  title.className = "example-group-title";
+  title.textContent = group.label;
 
-    top.append(kicker, count);
-    copy.append(top, title);
-    if (group.subtitle) {
-      copy.append(subtitle);
-    }
-    header.append(copy);
+  const subtitle = document.createElement("div");
+  subtitle.className = "example-group-subtitle";
+  subtitle.textContent = group.subtitle || "";
 
-    const trigger = document.createElement("button");
-    trigger.type = "button";
-    trigger.className = "example-group-trigger";
-    trigger.setAttribute("aria-expanded", open ? "true" : "false");
-    trigger.addEventListener("click", () => {
-      state.openExampleGroupId = open ? null : groupId;
-      renderExamples();
-    });
+  top.append(kicker, count);
+  copy.append(top, title);
+  if (group.subtitle) {
+    copy.append(subtitle);
+  }
+  header.append(copy);
 
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "example-group-trigger";
+  trigger.setAttribute("aria-expanded", open ? "true" : "false");
+  trigger.addEventListener("click", () => {
+    toggleExampleGroup(groupId);
+    renderExamples();
+  });
+
+  const triggerCopy = document.createElement("span");
+  triggerCopy.className = "example-group-trigger-copy";
+
+  const triggerLabel = document.createElement("strong");
+  const triggerMeta = document.createElement("span");
+
+  if (isFolder) {
+    const activeChild = (group.children || []).find((child) => groupContainsExample(child));
+    triggerLabel.textContent = activeChild?.label || "Open benchmark sets";
+    triggerMeta.textContent = active ? "HMMT and AIME benchmark suites" : "Browse benchmark families";
+  } else {
     const current = groupSelectedOption(group);
-    const triggerCopy = document.createElement("span");
-    triggerCopy.className = "example-group-trigger-copy";
-
-    const triggerLabel = document.createElement("strong");
     triggerLabel.textContent = current?.label || "Select a problem";
+    triggerMeta.textContent = active ? "Current selection" : "Open the stack";
+  }
 
-    const triggerMeta = document.createElement("span");
-    triggerMeta.textContent = active
-      ? "Current selection"
-      : "Open the stack";
+  const chevron = document.createElement("span");
+  chevron.className = "example-group-chevron";
+  chevron.textContent = open ? "−" : "+";
 
-    const chevron = document.createElement("span");
-    chevron.className = "example-group-chevron";
-    chevron.textContent = open ? "−" : "+";
+  triggerCopy.append(triggerLabel, triggerMeta);
+  trigger.append(triggerCopy, chevron);
+  card.append(header, trigger);
 
-    triggerCopy.append(triggerLabel, triggerMeta);
-    trigger.append(triggerCopy, chevron);
-    card.append(header, trigger);
-
-    if (open) {
+  if (open) {
+    if (isFolder) {
+      const nestedStack = document.createElement("div");
+      nestedStack.className = "example-nested-groups";
+      (group.children || []).forEach((child) => {
+        nestedStack.appendChild(renderExampleGroupCard(child, { nested: true }));
+      });
+      card.appendChild(nestedStack);
+    } else {
       const stack = document.createElement("div");
       stack.className = "example-option-stack";
 
@@ -1010,7 +1083,7 @@ function renderExamples() {
         optionButton.className = option.id === state.exampleId ? "example-option-card active" : "example-option-card";
         optionButton.addEventListener("click", () => {
           state.exampleId = option.id;
-          state.openExampleGroupId = null;
+          closeExampleGroups();
           nodes.customStatus.textContent = "Switch back to Custom Problem to search the selected skill datasets.";
           setSourceMode("example");
           clearLiveResults();
@@ -1033,8 +1106,15 @@ function renderExamples() {
 
       card.appendChild(stack);
     }
+  }
 
-    nodes.exampleList.appendChild(card);
+  return card;
+}
+
+function renderExamples() {
+  nodes.exampleList.innerHTML = "";
+  sidebarExampleGroups().forEach((group) => {
+    nodes.exampleList.appendChild(renderExampleGroupCard(group));
   });
 }
 
@@ -1719,7 +1799,7 @@ async function boot() {
   state.payload = await response.json();
   state.exampleId =
     state.payload.exampleGroups?.[0]?.optionIds?.[0] || state.payload.examples?.[0]?.id || null;
-  state.openExampleGroupId = null;
+  closeExampleGroups();
   state.examplePreviewCache = {
     ...(state.payload.precomputedExamplePreviews || {}),
   };

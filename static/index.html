@@ -35,12 +35,25 @@
             <img class="topbar-logo" src="/icon/dragon-face.png" alt="TRS mark" />
           </div>
           <div class="topbar-copy">
-          <h1>Thinking with Reasoning Skills: Fewer Tokens, More Accuracy</h1>
+            <h1>Thinking with Reasoning Skills: Fewer Tokens, More Accuracy</h1>
+            <p class="topbar-subtitle">
+              A live TRS demo: retrieve compact reasoning skills from prior math solutions, then compare direct
+              prompting against skill-guided reasoning on hard benchmark problems.
+            </p>
           </div>
         </div>
         <div class="topbar-meta">
-          <span class="topbar-chip subtle">Skill Datasets</span>
-          <div id="skillDatasetControls" class="dataset-toggle-list"></div>
+          <details class="topbar-menu">
+            <summary class="topbar-menu-summary">
+              <span class="topbar-menu-label">Skill Datasets</span>
+              <span id="skillDatasetSummary" class="topbar-menu-value">-</span>
+            </summary>
+            <div id="skillDatasetControls" class="dataset-toggle-list"></div>
+          </details>
+          <div class="verifier-card topbar-verifier-card">
+            <span>Verifier Model</span>
+            <select id="verifierModel" class="verifier-select" aria-label="Verifier model"></select>
+          </div>
         </div>
       </header>
 
@@ -48,7 +61,7 @@
         <aside class="sidebar">
           <div class="mode-card-grid">
             <button id="examplesModeButton" class="mode-card active" type="button">
-              <strong>Curated Examples</strong>
+              <strong>Example Problem</strong>
             </button>
             <button id="customModeButton" class="mode-card" type="button">
               <strong>Custom Problem</strong>
@@ -57,7 +70,7 @@
 
           <section id="examplesPanel" class="sidebar-panel">
             <div class="sidebar-head">
-              <h2>Curated Examples</h2>
+              <h2>Example Problem</h2>
             </div>
             <div id="exampleList" class="example-list"></div>
           </section>
@@ -67,6 +80,7 @@
               <h2>Custom Problem</h2>
             </div>
             <p id="customCorpusMeta" class="custom-meta"></p>
+            <p class="custom-note">Currently only supports English math questions and answers.</p>
             <label class="custom-label" for="customQuestion">Question</label>
             <textarea
               id="customQuestion"
@@ -95,7 +109,7 @@
             <div class="model-picker-shell">
               <div class="picker-head">
                 <div class="picker-copy">
-                  <span class="field-label">Model Families</span>
+                  <span class="field-label">Choose your model</span>
                 </div>
                 <div class="picker-tools">
                   <div class="control-actions">
@@ -103,10 +117,6 @@
                     <div class="verifier-card current-model-card">
                       <span>Current Model</span>
                       <strong id="currentModel">-</strong>
-                    </div>
-                    <div class="verifier-card">
-                      <span>Verifier Model</span>
-                      <select id="verifierModel" class="verifier-select" aria-label="Verifier model"></select>
                     </div>
                     <button id="runButton" class="run-button">Run Live Comparison</button>
                     <button id="stopButton" class="stop-button" type="button">Force Stop &amp; Clear</button>
