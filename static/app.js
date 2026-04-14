@@ -1028,19 +1028,16 @@ function renderExampleGroupCard(group, options = {}) {
   kicker.className = "example-group-kicker";
   kicker.textContent = isFolder ? "Collection" : group.kind === "benchmark" ? "Benchmark" : "Example";
 
+  const count = document.createElement("span");
+  count.className = "example-group-count";
+  count.textContent = `${groupOptionIds(group).length} problems`;
+
   const title = document.createElement("strong");
   title.className = "example-group-title";
   title.textContent = group.label;
 
-  const subtitle = document.createElement("div");
-  subtitle.className = "example-group-subtitle";
-  subtitle.textContent = group.subtitle || "";
-
-  top.append(kicker);
+  top.append(kicker, count);
   copy.append(top, title);
-  if (group.subtitle) {
-    copy.append(subtitle);
-  }
   header.append(copy);
 
   const trigger = document.createElement("button");
