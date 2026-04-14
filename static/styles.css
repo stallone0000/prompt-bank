@@ -774,7 +774,8 @@ a {
 .current-model-menu {
   position: relative;
   min-width: 0;
-  flex: 0 1 360px;
+  flex: 0 1 288px;
+  max-width: 288px;
 }
 
 .current-model-menu summary {
