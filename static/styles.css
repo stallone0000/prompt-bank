@@ -111,7 +111,7 @@ a {
 }
 
 .topbar-accent {
-  color: var(--hero-accent);
+  color: var(--accent);
   font-weight: 700;
 }
 

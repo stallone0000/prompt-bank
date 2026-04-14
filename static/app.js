@@ -1098,7 +1098,6 @@ function renderExampleGroupCard(group, options = {}) {
         optionButton.className = option.id === state.exampleId ? "example-option-card active" : "example-option-card";
         optionButton.addEventListener("click", () => {
           state.exampleId = option.id;
-          closeExampleGroups();
           nodes.customStatus.textContent = "Switch back to Custom Problem to search the selected skill datasets.";
           setSourceMode("example");
           clearLiveResults();
