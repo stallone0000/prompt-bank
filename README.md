@@ -2,6 +2,12 @@
 
 This repository contains a public-facing demo for the paper's TRS method on curated `DeepMath-103K` examples.
 
+It now supports:
+
+- `Google` sign-in via `Supabase Auth`
+- authenticated `Run` access
+- per-user click and run event logging into `Supabase Postgres`
+
 ## Why not GitHub Pages alone?
 
 `GitHub Pages` is convenient for static sites, but it is the wrong place to put this demo by itself because the page needs to call the `360` chat API and must not expose the API key in browser JavaScript.
@@ -36,6 +42,9 @@ The curated demo payloads are checked into the repository under `data/`, so no l
 
 ```bash
 export TRS_DEMO_API_KEY="your-360-api-key"
+export SUPABASE_URL="https://your-project-id.supabase.co"
+export SUPABASE_ANON_KEY="your-supabase-anon-key"
+export SUPABASE_DB_URL="postgresql://postgres:password@db.your-project-id.supabase.co:5432/postgres?sslmode=require"
 ```
 
 2. Optional, if your environment needs the same internal proxy used by the experiments:
@@ -60,6 +69,12 @@ http://localhost:8080
 
 - `TRS_DEMO_API_KEY`
   - required unless `REBUTTAL_API_KEY` is already exported in the runtime
+- `SUPABASE_URL`
+  - required to enable Google sign-in
+- `SUPABASE_ANON_KEY`
+  - required to enable Google sign-in
+- `SUPABASE_DB_URL`
+  - required to persist user click / run events into `public.user_events`
 - `TRS_DEMO_API_URL`
   - default: `http://api.360.cn/v1/chat/completions`
 - `TRS_DEMO_PROXY_URL`
@@ -88,7 +103,12 @@ docker build -t trs-demo .
 Run command:
 
 ```bash
-docker run -p 8080:8080 -e TRS_DEMO_API_KEY="your-360-api-key" trs-demo
+docker run -p 8080:8080 \
+  -e TRS_DEMO_API_KEY="your-360-api-key" \
+  -e SUPABASE_URL="https://your-project-id.supabase.co" \
+  -e SUPABASE_ANON_KEY="your-supabase-anon-key" \
+  -e SUPABASE_DB_URL="postgresql://postgres:password@db.your-project-id.supabase.co:5432/postgres?sslmode=require" \
+  trs-demo
 ```
 
 ### Render / Railway
@@ -97,6 +117,7 @@ docker run -p 8080:8080 -e TRS_DEMO_API_KEY="your-360-api-key" trs-demo
 - `render.yaml` is already included for Render Blueprint deploys
 - the included blueprint targets the `main` branch and defaults to Render's `free` plan
 - set `TRS_DEMO_API_KEY` in the platform dashboard
+- set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_DB_URL` in the platform dashboard
 - set `TRS_DEMO_PROXY_URL` only if the deployment environment actually needs it
 - if the platform needs a health check path, use `/api/health`
 - switch the plan to `starter` later if you want to avoid free-tier sleep / cold starts
@@ -112,8 +133,23 @@ docker run -p 8080:8080 -e TRS_DEMO_API_KEY="your-360-api-key" trs-demo
 3. In Render, choose `New +` -> `Blueprint`.
 4. Select this repo. Render will detect `render.yaml`.
 5. Set `TRS_DEMO_API_KEY` in the service environment.
-6. Add `TRS_DEMO_PROXY_URL` only if the deployed environment cannot reach `http://api.360.cn` directly.
-7. Click deploy. Render will return a public `https://...onrender.com` URL.
+6. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_DB_URL` in the service environment.
+7. Add `TRS_DEMO_PROXY_URL` only if the deployed environment cannot reach `http://api.360.cn` directly.
+8. Click deploy. Render will return a public `https://...onrender.com` URL.
+
+## Supabase setup
+
+1. Create a Supabase project.
+2. In `Authentication -> Providers -> Google`, enable `Google`.
+3. Add your local URL and Render URL to the Google redirect allowlist in Supabase.
+4. In the Supabase SQL editor, run `supabase/user_events.sql`.
+
+If `SUPABASE_DB_URL` is configured, the app also tries to create `public.user_events` automatically at startup.
+
+The event log is stored in `public.user_events`. You can inspect it directly in:
+
+- `Supabase Dashboard -> Table Editor -> user_events`
+- `Supabase Dashboard -> SQL Editor`
 
 ## Data files
 

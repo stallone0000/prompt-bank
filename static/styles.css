@@ -127,6 +127,74 @@ a {
   gap: 6px;
 }
 
+.auth-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-soft);
+}
+
+.auth-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.auth-status-label {
+  font-size: 0.68rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.auth-status-value {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.auth-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.auth-button,
+.auth-link {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.auth-button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.auth-link {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 0.73rem;
+}
+
+.auth-button:hover,
+.auth-link:hover {
+  border-color: rgba(16, 163, 127, 0.28);
+  background: #ffffff;
+}
+
 .topbar-menu {
   position: relative;
 }

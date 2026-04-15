@@ -22,6 +22,11 @@ from typing import Any, Callable, Dict
 from urllib import error, request
 from urllib.parse import urlparse
 
+try:
+    import psycopg
+except ImportError:  # pragma: no cover - optional at local dev time
+    psycopg = None
+
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
@@ -98,6 +103,28 @@ SKILL_DATASET_OPTIONS = (
 DEFAULT_SELECTED_SKILL_DATASET_IDS = tuple(
     option["id"] for option in SKILL_DATASET_OPTIONS if option["default_selected"]
 )
+AUTH_CACHE_TTL_SECONDS = 300
+USER_EVENT_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS public.user_events (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL,
+    email TEXT NOT NULL DEFAULT '',
+    event_type TEXT NOT NULL,
+    request_path TEXT NOT NULL DEFAULT '',
+    source_mode TEXT,
+    example_id TEXT,
+    question_id TEXT,
+    model_id TEXT,
+    verifier_model_id TEXT,
+    skill_dataset_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    event_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS user_events_user_id_created_at_idx
+    ON public.user_events (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS user_events_event_type_created_at_idx
+    ON public.user_events (event_type, created_at DESC);
+"""
 
 PROMPT_DIRECT = """You are a helpful and harmless assistant.
 Let's think step by step:
@@ -1232,6 +1259,227 @@ def get_api_key() -> str:
     return os.environ.get("TRS_DEMO_API_KEY") or os.environ.get("REBUTTAL_API_KEY", "")
 
 
+def get_supabase_url() -> str:
+    return os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+
+
+def get_supabase_anon_key() -> str:
+    return os.environ.get("SUPABASE_ANON_KEY", "").strip()
+
+
+def get_supabase_db_url() -> str:
+    return os.environ.get("SUPABASE_DB_URL", "").strip()
+
+
+def supabase_auth_enabled() -> bool:
+    return bool(get_supabase_url() and get_supabase_anon_key())
+
+
+def supabase_logging_enabled() -> bool:
+    return bool(get_supabase_db_url())
+
+
+def auth_payload() -> Dict[str, Any]:
+    enabled = supabase_auth_enabled()
+    return {
+        "enabled": enabled,
+        "providerLabel": "Google",
+        "supabaseUrl": get_supabase_url() if enabled else "",
+        "supabaseAnonKey": get_supabase_anon_key() if enabled else "",
+        "requiresLoginForRun": enabled,
+        "loggingEnabled": supabase_logging_enabled(),
+    }
+
+
+_AUTH_USER_CACHE: Dict[str, tuple[float, Dict[str, Any]]] = {}
+_AUTH_USER_CACHE_LOCK = threading.Lock()
+
+
+def supabase_request(
+    path: str,
+    *,
+    method: str = "GET",
+    payload: Dict[str, Any] | None = None,
+    access_token: str = "",
+) -> Dict[str, Any]:
+    supabase_url = get_supabase_url()
+    if not supabase_url:
+        raise RuntimeError("SUPABASE_URL is not configured.")
+    anon_key = get_supabase_anon_key()
+    if not anon_key:
+        raise RuntimeError("SUPABASE_ANON_KEY is not configured.")
+
+    body = None if payload is None else json.dumps(payload).encode("utf-8")
+    headers = {
+        "apikey": anon_key,
+        "Content-Type": "application/json; charset=utf-8",
+    }
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    req = request.Request(
+        f"{supabase_url}{path}",
+        data=body,
+        headers=headers,
+        method=method,
+    )
+    opener = build_opener()
+    with opener.open(req, timeout=30) as response:
+        raw = response.read().decode("utf-8", errors="replace")
+    if not raw:
+        return {}
+    return json.loads(raw)
+
+
+def verify_supabase_access_token(access_token: str) -> Dict[str, Any]:
+    token = (access_token or "").strip()
+    if not token:
+        raise PermissionError("Missing access token.")
+    if not supabase_auth_enabled():
+        return {}
+
+    now = time.time()
+    with _AUTH_USER_CACHE_LOCK:
+        cached = _AUTH_USER_CACHE.get(token)
+        if cached and cached[0] > now:
+            return cached[1]
+
+    try:
+        user = supabase_request("/auth/v1/user", access_token=token)
+    except error.HTTPError as exc:
+        if exc.code in {401, 403}:
+            raise PermissionError("Invalid or expired session. Please sign in again.") from exc
+        raise RuntimeError(format_upstream_error(exc)) from exc
+
+    if not isinstance(user, dict) or not user.get("id"):
+        raise PermissionError("Invalid Supabase session.")
+
+    with _AUTH_USER_CACHE_LOCK:
+        _AUTH_USER_CACHE[token] = (now + AUTH_CACHE_TTL_SECONDS, user)
+    return user
+
+
+def parse_bearer_token(header_value: str) -> str:
+    parts = (header_value or "").strip().split(" ", 1)
+    if len(parts) == 2 and parts[0].lower() == "bearer":
+        return parts[1].strip()
+    return ""
+
+
+def ensure_user_event_table() -> bool:
+    db_url = get_supabase_db_url()
+    if not db_url:
+        return False
+    if psycopg is None:
+        print("Supabase logging disabled: psycopg is not installed.", file=sys.stderr, flush=True)
+        return False
+
+    try:
+        with psycopg.connect(db_url, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(USER_EVENT_TABLE_DDL)
+        return True
+    except Exception as exc:  # pragma: no cover - depends on external DB
+        print(f"Supabase logging disabled: failed to initialize user_events table: {exc}", file=sys.stderr, flush=True)
+        return False
+
+
+def coerce_text_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, tuple):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def build_user_event_record(
+    *,
+    user: Dict[str, Any],
+    event_type: str,
+    request_path: str,
+    payload: Dict[str, Any],
+    metadata: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    metadata_payload = {}
+    if isinstance(payload.get("metadata"), dict):
+        metadata_payload.update(payload.get("metadata") or {})
+    if metadata:
+        metadata_payload.update(metadata)
+
+    email = (user.get("email") or "").strip()
+    user_metadata = user.get("user_metadata") if isinstance(user.get("user_metadata"), dict) else {}
+    app_metadata = user.get("app_metadata") if isinstance(user.get("app_metadata"), dict) else {}
+    if user_metadata:
+        metadata_payload.setdefault("userMetadata", user_metadata)
+    if app_metadata:
+        metadata_payload.setdefault("appMetadata", app_metadata)
+
+    return {
+        "user_id": str(user.get("id") or "").strip(),
+        "email": email,
+        "event_type": str(event_type or "").strip() or "unknown",
+        "request_path": request_path,
+        "source_mode": (payload.get("sourceMode") or "").strip() or None,
+        "example_id": (payload.get("id") or payload.get("exampleId") or "").strip() or None,
+        "question_id": (payload.get("questionId") or "").strip() or None,
+        "model_id": (payload.get("modelId") or "").strip() or None,
+        "verifier_model_id": (payload.get("verifierModelId") or "").strip() or None,
+        "skill_dataset_ids": coerce_text_list(payload.get("skillDatasetIds")),
+        "event_payload": metadata_payload,
+    }
+
+
+def insert_user_event(record: Dict[str, Any]) -> None:
+    db_url = get_supabase_db_url()
+    if not db_url or psycopg is None:
+        return
+
+    with psycopg.connect(db_url, autocommit=True) as conn:  # pragma: no cover - depends on external DB
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO public.user_events (
+                    user_id,
+                    email,
+                    event_type,
+                    request_path,
+                    source_mode,
+                    example_id,
+                    question_id,
+                    model_id,
+                    verifier_model_id,
+                    skill_dataset_ids,
+                    event_payload
+                )
+                VALUES (
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    record["user_id"],
+                    record["email"],
+                    record["event_type"],
+                    record["request_path"],
+                    record["source_mode"],
+                    record["example_id"],
+                    record["question_id"],
+                    record["model_id"],
+                    record["verifier_model_id"],
+                    record["skill_dataset_ids"],
+                    json.dumps(record["event_payload"], ensure_ascii=False),
+                ),
+            )
+
+
 def get_verify_model() -> str:
     return os.environ.get("TRS_DEMO_VERIFY_MODEL", "openai/gpt-5-mini").strip() or "openai/gpt-5-mini"
 
@@ -1960,6 +2208,35 @@ class DemoHandler(SimpleHTTPRequestHandler):
         body = self.rfile.read(content_length).decode("utf-8") if content_length else "{}"
         return json.loads(body or "{}")
 
+    def _require_authenticated_user(self) -> Dict[str, Any] | None:
+        if not self.server.auth_enabled:
+            return None
+        token = parse_bearer_token(self.headers.get("Authorization", ""))
+        if not token:
+            raise PermissionError("Sign in with Google to run live comparison.")
+        return verify_supabase_access_token(token)
+
+    def _record_user_event(
+        self,
+        user: Dict[str, Any] | None,
+        event_type: str,
+        payload: Dict[str, Any],
+        metadata: Dict[str, Any] | None = None,
+    ) -> None:
+        if not user or not self.server.user_event_logging_ready:
+            return
+        try:
+            record = build_user_event_record(
+                user=user,
+                event_type=event_type,
+                request_path=self.path,
+                payload=payload,
+                metadata=metadata,
+            )
+            insert_user_event(record)
+        except Exception as exc:
+            print(f"Failed to record user event '{event_type}': {exc}", file=sys.stderr, flush=True)
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
@@ -2033,6 +2310,8 @@ class DemoHandler(SimpleHTTPRequestHandler):
         config: ModelConfig,
         verifier_model: str,
         run_id: int | None,
+        request_payload: Dict[str, Any],
+        current_user: Dict[str, Any] | None,
     ) -> None:
         question = example["question"]
         reference_answer = example["answer"]
@@ -2043,6 +2322,15 @@ class DemoHandler(SimpleHTTPRequestHandler):
             "trs": build_prompt(config.prompt_template, question, skill_text),
         }
 
+        self._record_user_event(
+            current_user,
+            "run_started",
+            request_payload,
+            metadata={
+                "questionTitle": example.get("title") or "",
+                "questionSourceMode": "custom" if example["id"] == "custom-problem" else "example",
+            },
+        )
         self._send_sse_headers()
         self._send_sse_event(
             "meta",
@@ -2133,14 +2421,45 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
         try:
             if failures:
+                self._record_user_event(
+                    current_user,
+                    "run_failed",
+                    request_payload,
+                    metadata={
+                        "error": failures[0],
+                        "questionTitle": example.get("title") or "",
+                    },
+                )
                 self._send_sse_event("error", {"error": failures[0]})
             else:
+                summary = compute_live_summary(results["direct"], results["trs"])
+                self._record_user_event(
+                    current_user,
+                    "run_completed",
+                    request_payload,
+                    metadata={
+                        "questionTitle": example.get("title") or "",
+                        "direct": {
+                            "promptTokens": results["direct"].get("prompt_tokens"),
+                            "completionTokens": results["direct"].get("completion_tokens"),
+                            "costYuan": results["direct"].get("cost_yuan"),
+                            "verifierStatus": (results["direct"].get("correctness") or {}).get("status"),
+                        },
+                        "trs": {
+                            "promptTokens": results["trs"].get("prompt_tokens"),
+                            "completionTokens": results["trs"].get("completion_tokens"),
+                            "costYuan": results["trs"].get("cost_yuan"),
+                            "verifierStatus": (results["trs"].get("correctness") or {}).get("status"),
+                        },
+                        "summary": summary,
+                    },
+                )
                 self._send_sse_event(
                     "summary",
                     {
                         "runId": run_id,
                         "model": model_payload(config),
-                        "summary": compute_live_summary(results["direct"], results["trs"]),
+                        "summary": summary,
                     },
                 )
             self._send_sse_event("done", {"runId": run_id, "ok": not failures})
@@ -2154,11 +2473,28 @@ class DemoHandler(SimpleHTTPRequestHandler):
         try:
             payload = self._read_json_body()
 
+            if parsed.path == "/api/track":
+                current_user = self._require_authenticated_user()
+                event_type = (payload.get("eventType") or "").strip()
+                if not event_type:
+                    raise ValueError("eventType is required.")
+                self._record_user_event(current_user, event_type, payload)
+                self._send_json({"ok": True})
+                return
+
             if parsed.path == "/api/retrieve_skill":
                 preview = self._build_retrieved_preview(payload)
                 serialized = serialize_preview(preview)
                 self._send_json({"ok": True, "preview": serialized, "custom": serialized})
                 return
+
+            if parsed.path not in {"/api/run", "/api/run_stream"}:
+                self._send_json({"error": f"Unknown endpoint: {parsed.path}"}, status=HTTPStatus.NOT_FOUND)
+                return
+
+            current_user = None
+            if parsed.path in {"/api/run", "/api/run_stream"}:
+                current_user = self._require_authenticated_user()
 
             example, config = self._resolve_request(payload)
             verifier_model = resolve_verifier_model(payload.get("verifierModelId"))
@@ -2166,6 +2502,27 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
             if parsed.path == "/api/run":
                 live = serialize_live_comparison(example, config, verifier_model)
+                self._record_user_event(
+                    current_user,
+                    "run_completed",
+                    payload,
+                    metadata={
+                        "questionTitle": example.get("title") or "",
+                        "direct": {
+                            "promptTokens": live["direct"].get("prompt_tokens"),
+                            "completionTokens": live["direct"].get("completion_tokens"),
+                            "costYuan": live["direct"].get("cost_yuan"),
+                            "verifierStatus": (live["direct"].get("correctness") or {}).get("status"),
+                        },
+                        "trs": {
+                            "promptTokens": live["trs"].get("prompt_tokens"),
+                            "completionTokens": live["trs"].get("completion_tokens"),
+                            "costYuan": live["trs"].get("cost_yuan"),
+                            "verifierStatus": (live["trs"].get("correctness") or {}).get("status"),
+                        },
+                        "summary": live.get("summary") or {},
+                    },
+                )
                 self._send_json(
                     {
                         "ok": True,
@@ -2177,10 +2534,10 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 return
 
             if parsed.path == "/api/run_stream":
-                self._handle_stream_run(example, config, verifier_model, run_id)
+                self._handle_stream_run(example, config, verifier_model, run_id, payload, current_user)
                 return
-
-            self._send_json({"error": f"Unknown endpoint: {parsed.path}"}, status=HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.UNAUTHORIZED)
         except ValueError as exc:
             self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
         except Exception as exc:
@@ -2190,6 +2547,8 @@ class DemoHandler(SimpleHTTPRequestHandler):
 class DemoServer(ThreadingHTTPServer):
     def __init__(self, server_address: tuple[str, int], handler_class: type[DemoHandler]) -> None:
         super().__init__(server_address, handler_class)
+        self.auth_enabled = supabase_auth_enabled()
+        self.user_event_logging_ready = ensure_user_event_table()
         payload = load_examples_payload()
         self.examples_payload = payload
         self.examples_by_id = {example["id"]: example for example in payload["examples"]}
@@ -2211,6 +2570,10 @@ class DemoServer(ThreadingHTTPServer):
                 for option in SKILL_DATASET_OPTIONS
                 if option["id"] in self.skill_corpora
             ],
+        }
+        self.examples_payload["auth"] = {
+            **auth_payload(),
+            "loggingReady": self.user_event_logging_ready,
         }
 
 
