@@ -515,14 +515,14 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "gemini31pro": ModelConfig(
         model_id="gemini31pro",
         company="Gemini",
-        provider="Google",
+        provider="Qiniu",
         family="Gemini",
         label="Gemini 3.1 Pro Preview",
-        api_model="google/gemini-3.1-pro-preview",
+        api_model="qiniu/gemini-3.1-pro-preview",
         prompt_template=PROMPT_TRYTO,
         input_price_yuan_per_million=14.6,
         output_price_yuan_per_million=87.6,
-        supports_reasoning_trace=False,
+        supports_reasoning_trace=True,
     ),
     "deepseek32": ModelConfig(
         model_id="deepseek32",
