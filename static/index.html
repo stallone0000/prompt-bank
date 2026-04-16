@@ -26,10 +26,6 @@
       defer
       src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"
     ></script>
-    <script
-      defer
-      src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"
-    ></script>
   </head>
   <body>
     <div class="page-shell">
@@ -56,16 +52,6 @@
           <div class="verifier-card topbar-verifier-card">
             <span>Verifier Model</span>
             <select id="verifierModel" class="verifier-select" aria-label="Verifier model"></select>
-          </div>
-          <div id="authCard" class="auth-card hidden">
-            <div class="auth-copy">
-              <span id="authStatusLabel" class="auth-status-label">Account</span>
-              <strong id="authStatusValue" class="auth-status-value">Guest</strong>
-            </div>
-            <div class="auth-actions">
-              <button id="googleSignInButton" class="auth-button" type="button">Sign in with Google</button>
-              <button id="signOutButton" class="auth-link hidden" type="button">Sign out</button>
-            </div>
           </div>
         </div>
       </header>
@@ -235,6 +221,6 @@
       </main>
     </div>
 
-    <script defer src="/app.js"></script>
+    <script src="/app.js"></script>
   </body>
 </html>

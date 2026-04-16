@@ -40,11 +40,6 @@ const state = {
   streamSawLaneOutput: false,
   streamAbortController: null,
   userStopped: false,
-  authClient: null,
-  authSession: null,
-  authUser: null,
-  authReady: false,
-  trackedAuthUserId: null,
 };
 
 const STREAM_CONNECT_MAX_RETRIES = 4;
@@ -83,11 +78,6 @@ const nodes = {
   referenceAnswer: document.getElementById("referenceAnswer"),
   currentModel: document.getElementById("currentModel"),
   verifierModel: document.getElementById("verifierModel"),
-  authCard: document.getElementById("authCard"),
-  authStatusLabel: document.getElementById("authStatusLabel"),
-  authStatusValue: document.getElementById("authStatusValue"),
-  googleSignInButton: document.getElementById("googleSignInButton"),
-  signOutButton: document.getElementById("signOutButton"),
   skillCardSource: document.getElementById("skillCardSource"),
   skillCard: document.getElementById("skillCard"),
   runStatus: document.getElementById("runStatus"),
@@ -198,55 +188,6 @@ function skillDatasetOptions() {
   return state.payload?.skillDatasets?.options || [];
 }
 
-function authConfig() {
-  return state.payload?.auth || {};
-}
-
-function authEnabled() {
-  return Boolean(authConfig().enabled);
-}
-
-function authRequiredForRun() {
-  return Boolean(authConfig().requiresLoginForRun);
-}
-
-function authAccessToken() {
-  return state.authSession?.access_token || "";
-}
-
-function authHeaders(extra = {}) {
-  const headers = { ...extra };
-  if (authAccessToken()) {
-    headers.Authorization = `Bearer ${authAccessToken()}`;
-  }
-  return headers;
-}
-
-function currentUserEmail() {
-  return state.authUser?.email || "";
-}
-
-function hasAuthenticatedSession() {
-  return Boolean(authAccessToken());
-}
-
-function currentProblemId() {
-  const problem = currentProblemContext();
-  return problem?.id || "";
-}
-
-function baseTrackingPayload(metadata = {}) {
-  return {
-    id: currentProblemId(),
-    questionId: currentProblemContext()?.questionId || "",
-    sourceMode: state.sourceMode,
-    modelId: state.modelId,
-    verifierModelId: state.verifierModelId,
-    skillDatasetIds: state.skillDatasetIds,
-    metadata,
-  };
-}
-
 function datasetSelectionKey(datasetIds = state.skillDatasetIds) {
   return [...datasetIds].sort().join(",");
 }
@@ -262,161 +203,6 @@ function availableSkillDatasetIds() {
 
 function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function updateRunButtonState() {
-  if (state.running) {
-    nodes.runButton.disabled = true;
-    nodes.runButton.textContent = "Running...";
-    nodes.stopButton.disabled = false;
-    return;
-  }
-  nodes.stopButton.disabled = true;
-  if (authRequiredForRun() && !hasAuthenticatedSession()) {
-    nodes.runButton.disabled = true;
-    nodes.runButton.textContent = "Sign in to Run";
-    return;
-  }
-  nodes.runButton.disabled = false;
-  nodes.runButton.textContent = "Run";
-}
-
-async function trackEvent(eventType, payload = {}) {
-  if (!authEnabled() || !hasAuthenticatedSession()) {
-    return;
-  }
-  try {
-    await fetch("/api/track", {
-      method: "POST",
-      headers: authHeaders({
-        "Content-Type": "application/json",
-      }),
-      cache: "no-store",
-      keepalive: true,
-      body: JSON.stringify({
-        eventType,
-        ...payload,
-      }),
-    });
-  } catch {}
-}
-
-async function handleAuthSession(session) {
-  state.authSession = session || null;
-  state.authUser = session?.user || null;
-  renderAuthCard();
-  updateRunButtonState();
-  if (!state.running && authRequiredForRun() && !state.authUser) {
-    nodes.runStatus.textContent = "Sign in with Google to run live comparison.";
-  } else if (!state.running && state.authUser && !state.streamAbortController) {
-    nodes.runStatus.textContent = "Press Run to compare direct prompting against TRS on the selected problem.";
-  }
-  if (state.authUser?.id && state.trackedAuthUserId !== state.authUser.id) {
-    state.trackedAuthUserId = state.authUser.id;
-    await trackEvent("auth_signed_in", {
-      metadata: {
-        provider: state.authUser?.app_metadata?.provider || "google",
-        email: currentUserEmail(),
-      },
-    });
-  }
-  if (!state.authUser) {
-    state.trackedAuthUserId = null;
-  }
-}
-
-function renderAuthCard() {
-  if (!authEnabled()) {
-    nodes.authCard.classList.add("hidden");
-    return;
-  }
-  nodes.authCard.classList.remove("hidden");
-  if (state.authReady && hasAuthenticatedSession()) {
-    nodes.authStatusLabel.textContent = "Signed in";
-    nodes.authStatusValue.textContent = currentUserEmail() || "Google user";
-    nodes.googleSignInButton.classList.add("hidden");
-    nodes.signOutButton.classList.remove("hidden");
-    return;
-  }
-  nodes.authStatusLabel.textContent = "Account";
-  nodes.authStatusValue.textContent = state.authReady ? "Sign in to run" : "Loading session…";
-  nodes.googleSignInButton.classList.remove("hidden");
-  nodes.signOutButton.classList.add("hidden");
-}
-
-async function initializeAuth() {
-  renderAuthCard();
-  updateRunButtonState();
-  if (!authEnabled()) {
-    state.authReady = true;
-    return;
-  }
-  if (!window.supabase?.createClient) {
-    nodes.runStatus.textContent = "Supabase client failed to load. Reload the page.";
-    state.authReady = true;
-    renderAuthCard();
-    updateRunButtonState();
-    return;
-  }
-
-  const { supabaseUrl, supabaseAnonKey } = authConfig();
-  state.authClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-  });
-
-  const {
-    data: { session },
-  } = await state.authClient.auth.getSession();
-
-  state.authClient.auth.onAuthStateChange((_event, nextSession) => {
-    state.authReady = true;
-    void handleAuthSession(nextSession);
-  });
-
-  state.authReady = true;
-  await handleAuthSession(session);
-}
-
-async function signInWithGoogle() {
-  if (!state.authClient) {
-    return;
-  }
-  nodes.googleSignInButton.disabled = true;
-  try {
-    const { error } = await state.authClient.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-    if (error) {
-      throw error;
-    }
-  } catch (error) {
-    nodes.runStatus.textContent = `Google sign-in failed: ${error.message || error}`;
-    nodes.googleSignInButton.disabled = false;
-  }
-}
-
-async function signOut() {
-  if (!state.authClient) {
-    return;
-  }
-  try {
-    await trackEvent("auth_signed_out", {
-      metadata: {
-        email: currentUserEmail(),
-      },
-    });
-    await state.authClient.auth.signOut();
-    clearComparison("Signed out. Sign in with Google to run live comparison.");
-  } catch (error) {
-    nodes.runStatus.textContent = `Sign-out failed: ${error.message || error}`;
-  }
 }
 
 function typesetMath(targets = []) {
@@ -807,7 +593,6 @@ function renderModelSelector() {
       renderModelSelector();
       renderSelection();
       nodes.currentModelMenu.open = false;
-      void trackEvent("model_selected", baseTrackingPayload({ selectedModelId: modelId }));
     });
 
     const badge = document.createElement("span");
@@ -904,10 +689,6 @@ function renderSkillDatasetControls() {
       state.skillDatasetIds = skillDatasetOptions()
         .map((dataset) => dataset.id)
         .filter((datasetId) => next.has(datasetId));
-      void trackEvent(
-        "skill_datasets_changed",
-        baseTrackingPayload({ selectedSkillDatasetIds: state.skillDatasetIds })
-      );
       renderSkillDatasetControls();
       updateSkillDatasetMeta();
       clearLiveResults();
@@ -1145,13 +926,6 @@ function applyCustomSelection(custom, options = {}) {
   if (clearResults) {
     clearLiveResults();
   }
-  void trackEvent(
-    "custom_problem_applied",
-    baseTrackingPayload({
-      selectedProblemId: custom.id,
-      selectedProblemLabel: custom.title,
-    })
-  );
 }
 
 async function prepareExamplePreview(options = {}) {
@@ -1377,14 +1151,6 @@ function renderExampleGroupCard(group, options = {}) {
   trigger.className = "example-group-trigger";
   trigger.setAttribute("aria-expanded", open ? "true" : "false");
   trigger.addEventListener("click", () => {
-    void trackEvent(
-      "example_group_toggled",
-      baseTrackingPayload({
-        groupId,
-        groupLabel: group.label,
-        nextOpen: !open,
-      })
-    );
     toggleExampleGroup(groupId);
     renderExamples();
   });
@@ -1438,13 +1204,6 @@ function renderExampleGroupCard(group, options = {}) {
           state.exampleId = option.id;
           nodes.customStatus.textContent = "Switch back to Custom Problem to search the selected skill datasets.";
           setSourceMode("example");
-          void trackEvent(
-            "problem_selected",
-            baseTrackingPayload({
-              selectedProblemId: option.id,
-              selectedProblemLabel: option.label,
-            })
-          );
           prepareExamplePreview({ clearResults: false }).catch((error) => {
             nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
           });
@@ -1798,7 +1557,9 @@ function seedLaneFallback(lane) {
 }
 
 function resetRunControls() {
-  updateRunButtonState();
+  nodes.runButton.disabled = false;
+  nodes.runButton.textContent = "Run";
+  nodes.stopButton.disabled = true;
 }
 
 function stopRun() {
@@ -1807,7 +1568,6 @@ function stopRun() {
     nodes.runStatus.textContent = "No active run to stop.";
     return;
   }
-  void trackEvent("run_stopped", baseTrackingPayload());
   state.activeRunId += 1;
   state.userStopped = true;
   state.streamError = null;
@@ -2053,10 +1813,10 @@ async function openRunStreamResponse(signal, runId) {
 
       const response = await fetch("/api/run_stream", {
         method: "POST",
-        headers: authHeaders({
+        headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
-        }),
+        },
         cache: "no-store",
         signal,
         body: JSON.stringify(buildRunRequestBody(runId)),
@@ -2098,10 +1858,6 @@ async function runComparison() {
   if (state.running) {
     return;
   }
-  if (authRequiredForRun() && !hasAuthenticatedSession()) {
-    nodes.runStatus.textContent = "Sign in with Google to run live comparison.";
-    return;
-  }
 
   if (state.sourceMode === "custom") {
     try {
@@ -2136,7 +1892,9 @@ async function runComparison() {
   state.laneAttempts = { direct: 1, trs: 1 };
   state.activeModel = state.payload.models[state.modelId];
   state.streamAbortController = new AbortController();
-  updateRunButtonState();
+  nodes.runButton.disabled = true;
+  nodes.runButton.textContent = "Running...";
+  nodes.stopButton.disabled = false;
   setLaneStreaming("direct", true);
   setLaneStreaming("trs", true);
   seedReasoningPlaceholders();
@@ -2220,22 +1978,16 @@ async function boot() {
   renderSelection();
   clearLiveResults();
   updateCustomApplyState();
-  await initializeAuth();
   nodes.runButton.addEventListener("click", runComparison);
   nodes.stopButton.addEventListener("click", stopRun);
-  nodes.clearButton.addEventListener("click", () => {
-    void trackEvent("comparison_cleared", baseTrackingPayload());
-    clearComparison();
-  });
+  nodes.clearButton.addEventListener("click", () => clearComparison());
   nodes.examplesModeButton.addEventListener("click", () => {
-    void trackEvent("source_mode_selected", baseTrackingPayload({ selectedSourceMode: "example" }));
     setSourceMode("example");
     prepareExamplePreview({ clearResults: false }).catch((error) => {
       nodes.runStatus.textContent = error instanceof Error ? error.message : String(error);
     });
   });
   nodes.customModeButton.addEventListener("click", () => {
-    void trackEvent("source_mode_selected", baseTrackingPayload({ selectedSourceMode: "custom" }));
     setSourceMode("custom");
     nodes.customQuestion.focus();
     updateCustomApplyState();
@@ -2254,11 +2006,8 @@ async function boot() {
     if (state.running || state.streamAbortController) {
       clearComparison("Switched verifier model. Previous run cleared.");
     }
-    void trackEvent("verifier_selected", baseTrackingPayload({ selectedVerifierModelId: state.verifierModelId }));
   });
-  nodes.googleSignInButton.addEventListener("click", signInWithGoogle);
-  nodes.signOutButton.addEventListener("click", signOut);
-  updateRunButtonState();
+  nodes.stopButton.disabled = true;
   await prepareExamplePreview({ clearResults: false });
 }
 
