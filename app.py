@@ -75,7 +75,7 @@ AOPS_SKILL_CORPUS_CANDIDATES = (
         "label": "AoPS",
     },
     {
-        "path": APP_DIR.parent / "AoPS-wiki" / "results" / "aops_skill_cards_full.jsonl",
+        "path": APP_DIR.parent / "AoPS-wiki" / "results" / "aops_skill_cards_complete_full.jsonl",
         "format": "aops",
         "source_key": "aops",
         "source_label": "AoPS",
