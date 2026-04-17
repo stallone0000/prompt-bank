@@ -134,6 +134,8 @@ TOKEN_USAGE_FIELDS = [
 ]
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 HINT_PATTERN = re.compile(r"\bhints?\b", re.IGNORECASE)
+THINK_OPEN_TAG = "<think>"
+THINK_CLOSE_TAG = "</think>"
 RETRYABLE_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 RETRYABLE_ERROR_SNIPPETS = (
     "timed out",
@@ -482,7 +484,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         prompt_template=PROMPT_TRYTO,
         input_price_yuan_per_million=35.0,
         output_price_yuan_per_million=175.0,
-        supports_reasoning_trace=False,
+        supports_reasoning_trace=True,
         temperature_override=1.0,
     ),
     "claudesonnet46": ModelConfig(
@@ -1719,45 +1721,184 @@ def extract_content_text(value: Any) -> str:
     return ""
 
 
-def extract_reasoning_text(message: Dict[str, Any]) -> str:
+def merge_reasoning_segments(*segments: str) -> str:
+    merged = ""
+    for segment in segments:
+        candidate = (segment or "").strip()
+        if not candidate:
+            continue
+        if not merged:
+            merged = candidate
+            continue
+        if candidate in merged:
+            continue
+        if merged in candidate:
+            merged = candidate
+            continue
+        merged = f"{merged}\n\n{candidate}"
+    return merged
+
+
+def split_think_tagged_text(
+    text: str,
+    *,
+    initial_inside_think: bool = False,
+    assume_reasoning_prefix: bool = False,
+) -> tuple[str, str, bool, bool]:
+    if not text:
+        return "", "", initial_inside_think, False
+
+    reasoning_parts: list[str] = []
+    answer_parts: list[str] = []
+    inside_think = initial_inside_think
+    saw_tag = False
+    cursor = 0
+    lowered = text.lower()
+
+    if assume_reasoning_prefix and not inside_think:
+        close_idx = lowered.find(THINK_CLOSE_TAG)
+        open_idx = lowered.find(THINK_OPEN_TAG)
+        if close_idx != -1 and (open_idx == -1 or close_idx < open_idx):
+            reasoning_parts.append(text[:close_idx])
+            cursor = close_idx + len(THINK_CLOSE_TAG)
+            saw_tag = True
+
+    while cursor < len(text):
+        lowered = text.lower()
+        open_idx = lowered.find(THINK_OPEN_TAG, cursor)
+        close_idx = lowered.find(THINK_CLOSE_TAG, cursor)
+        next_candidates = [idx for idx in (open_idx, close_idx) if idx != -1]
+        if not next_candidates:
+            segment = text[cursor:]
+            if segment:
+                (reasoning_parts if inside_think else answer_parts).append(segment)
+            break
+
+        next_idx = min(next_candidates)
+        segment = text[cursor:next_idx]
+        if segment:
+            (reasoning_parts if inside_think else answer_parts).append(segment)
+
+        if open_idx != -1 and next_idx == open_idx:
+            inside_think = True
+            cursor = open_idx + len(THINK_OPEN_TAG)
+        else:
+            inside_think = False
+            cursor = close_idx + len(THINK_CLOSE_TAG)
+        saw_tag = True
+
+    return "".join(reasoning_parts), "".join(answer_parts), inside_think, saw_tag
+
+
+def extract_message_text_parts(message: Dict[str, Any]) -> tuple[str, str]:
+    reasoning_parts: list[str] = []
+    answer_parts: list[str] = []
+
     reasoning_value = message.get("reasoning_content")
     if reasoning_value not in (None, "", []):
-        return extract_content_text(reasoning_value)
+        reasoning_text = extract_content_text(reasoning_value)
+        if reasoning_text:
+            reasoning_parts.append(reasoning_text)
 
-    content = message.get("content")
+    content = message.get("content", "")
     if isinstance(content, list):
-        parts: list[str] = []
         for block in content:
-            if not isinstance(block, dict):
-                continue
-            block_type = str(block.get("type") or "").lower()
-            if block_type in {"reasoning", "thinking", "reasoning_text", "thinking_text"}:
+            if isinstance(block, dict):
+                block_type = str(block.get("type") or "").lower()
                 text = extract_content_text(block)
-                if text:
-                    parts.append(text)
-        if parts:
-            return "".join(parts)
-    return ""
+                if not text:
+                    continue
+                if block_type in {"reasoning", "thinking", "reasoning_text", "thinking_text"}:
+                    reasoning_parts.append(text)
+                    continue
+            else:
+                text = extract_content_text(block)
+                if not text:
+                    continue
+
+            inline_reasoning, inline_answer, _inside_think, saw_tag = split_think_tagged_text(
+                text,
+                assume_reasoning_prefix=bool(reasoning_parts),
+            )
+            if saw_tag:
+                if inline_reasoning:
+                    reasoning_parts.append(inline_reasoning)
+                if inline_answer:
+                    answer_parts.append(inline_answer)
+                continue
+            answer_parts.append(text)
+    else:
+        text = extract_content_text(content)
+        inline_reasoning, inline_answer, _inside_think, saw_tag = split_think_tagged_text(
+            text,
+            assume_reasoning_prefix=bool(reasoning_parts),
+        )
+        if saw_tag:
+            if inline_reasoning:
+                reasoning_parts.append(inline_reasoning)
+            if inline_answer:
+                answer_parts.append(inline_answer)
+        elif text:
+            answer_parts.append(text)
+
+    return merge_reasoning_segments(*reasoning_parts), "".join(answer_parts)
+
+
+def extract_reasoning_text(message: Dict[str, Any]) -> str:
+    reasoning_text, _answer_text = extract_message_text_parts(message)
+    return reasoning_text
 
 
 def extract_answer_text(message: Dict[str, Any]) -> str:
-    content = message.get("content", "")
-    if isinstance(content, list):
-        parts: list[str] = []
-        for block in content:
-            if not isinstance(block, dict):
-                text = extract_content_text(block)
-                if text:
-                    parts.append(text)
-                continue
+    _reasoning_text, answer_text = extract_message_text_parts(message)
+    return answer_text
+
+
+def extract_stream_delta_parts(delta: Dict[str, Any], state: Dict[str, Any]) -> tuple[str, str]:
+    reasoning_parts: list[str] = []
+    answer_parts: list[str] = []
+
+    reasoning_value = delta.get("reasoning_content")
+    if reasoning_value not in (None, "", []):
+        reasoning_text = extract_content_text(reasoning_value)
+        if reasoning_text:
+            reasoning_parts.append(reasoning_text)
+            state["saw_reasoning_signal"] = True
+
+    content = delta.get("content", "")
+    blocks = content if isinstance(content, list) else [content]
+    for block in blocks:
+        if isinstance(block, dict):
             block_type = str(block.get("type") or "").lower()
-            if block_type in {"reasoning", "thinking", "reasoning_text", "thinking_text"}:
-                continue
             text = extract_content_text(block)
-            if text:
-                parts.append(text)
-        return "".join(parts)
-    return extract_content_text(content)
+            if not text:
+                continue
+            if block_type in {"reasoning", "thinking", "reasoning_text", "thinking_text"}:
+                reasoning_parts.append(text)
+                state["saw_reasoning_signal"] = True
+                continue
+        else:
+            text = extract_content_text(block)
+            if not text:
+                continue
+
+        inline_reasoning, inline_answer, inside_think, saw_tag = split_think_tagged_text(
+            text,
+            initial_inside_think=bool(state.get("inside_think_tag")),
+            assume_reasoning_prefix=bool(state.get("saw_reasoning_signal")) and not bool(state.get("saw_answer_content")),
+        )
+        state["inside_think_tag"] = inside_think
+        if inline_reasoning:
+            reasoning_parts.append(inline_reasoning)
+            state["saw_reasoning_signal"] = True
+        if inline_answer:
+            answer_parts.append(inline_answer)
+            state["saw_answer_content"] = True
+        if not saw_tag and not inline_reasoning and not inline_answer and text:
+            answer_parts.append(text)
+            state["saw_answer_content"] = True
+
+    return "".join(reasoning_parts), "".join(answer_parts)
 
 
 def compute_live_summary(direct: Dict[str, Any], trs: Dict[str, Any]) -> Dict[str, Any]:
@@ -1872,6 +2013,11 @@ def stream_model(
         answer_parts: list[str] = []
         usage: Dict[str, Any] = {}
         finish_reason: str | None = None
+        parse_state = {
+            "inside_think_tag": False,
+            "saw_reasoning_signal": False,
+            "saw_answer_content": False,
+        }
 
         try:
             with opener.open(make_api_request(prompt_text, config, stream=True), timeout=timeout_seconds) as response:
@@ -1891,8 +2037,7 @@ def stream_model(
                     choice = choices[0] if choices else {}
                     finish_reason = choice.get("finish_reason") or finish_reason
                     delta = choice.get("delta", {})
-                    reasoning_piece = extract_reasoning_text(delta)
-                    answer_piece = extract_answer_text(delta)
+                    reasoning_piece, answer_piece = extract_stream_delta_parts(delta, parse_state)
                     if reasoning_piece:
                         reasoning_parts.append(reasoning_piece)
                         on_delta("reasoning", reasoning_piece)
