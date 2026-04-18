@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -37,6 +38,11 @@ LEGACY_SKILL_CORPUS_PATH = APP_DIR / "data" / "trs_skill_corpus.jsonl"
 RUN_QUOTA_MAX_RUNS = max(1, int(os.environ.get("TRS_DEMO_RUN_QUOTA_MAX_RUNS", "30")))
 RUN_QUOTA_WINDOW_SECONDS = max(60, int(os.environ.get("TRS_DEMO_RUN_QUOTA_WINDOW_SECONDS", "86400")))
 RUN_QUOTA_HASH_SALT = os.environ.get("TRS_DEMO_RUN_QUOTA_SALT", "trs-demo-run-quota")
+MAX_REQUEST_BYTES = max(4096, int(os.environ.get("TRS_DEMO_MAX_REQUEST_BYTES", str(128 * 1024))))
+MAX_CUSTOM_QUESTION_CHARS = max(256, int(os.environ.get("TRS_DEMO_MAX_CUSTOM_QUESTION_CHARS", "16000")))
+MAX_REFERENCE_ANSWER_CHARS = max(32, int(os.environ.get("TRS_DEMO_MAX_REFERENCE_ANSWER_CHARS", "4000")))
+MAX_OPTIONAL_FIELD_CHARS = max(32, int(os.environ.get("TRS_DEMO_MAX_OPTIONAL_FIELD_CHARS", "240")))
+MAX_CONCURRENT_RUNS = max(1, int(os.environ.get("TRS_DEMO_MAX_CONCURRENT_RUNS", "2")))
 DEEPMATH_SKILL_CORPUS_CANDIDATES = (
     {
         "path": DEEPMATH_SKILL_CORPUS_PATH,
@@ -255,6 +261,22 @@ class RunQuotaExceeded(RuntimeError):
         super().__init__(status.get("message") or "Daily run limit reached.")
 
 
+class RequestTooLarge(ValueError):
+    def __init__(self, limit_bytes: int) -> None:
+        self.limit_bytes = limit_bytes
+        super().__init__(f"Request body exceeds the {limit_bytes} byte limit.")
+
+
+class RunCapacityExceeded(RuntimeError):
+    def __init__(self, capacity: int) -> None:
+        self.capacity = capacity
+        super().__init__(f"The demo is busy right now. Please retry in a moment. ({capacity} active runs max)")
+
+
+class RunCancelledError(RuntimeError):
+    pass
+
+
 class RunQuotaStore:
     def __init__(self, path: Path, *, max_runs: int, window_seconds: int) -> None:
         self.path = path
@@ -364,6 +386,46 @@ class RunQuotaStore:
             self.records[key] = record
             self._save_records_locked()
             return self._status_from_record(record, now)
+
+
+def extract_trusted_client_ip(raw_value: str, *, prefer_last: bool = False) -> str | None:
+    if not raw_value:
+        return None
+
+    candidates = [part.strip() for part in raw_value.split(",")]
+    if prefer_last:
+        candidates = list(reversed(candidates))
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        lowered = candidate.lower()
+        if lowered == "unknown":
+            continue
+        if lowered.startswith("for="):
+            candidate = candidate[4:].strip()
+        candidate = candidate.strip().strip('"').strip("'").strip("[]")
+        try:
+            return str(ipaddress.ip_address(candidate))
+        except ValueError:
+            continue
+    return None
+
+
+def normalize_required_text(value: Any, field_label: str, max_chars: int) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError(f"{field_label} is required.")
+    if len(text) > max_chars:
+        raise ValueError(f"{field_label} exceeds the {max_chars}-character limit.")
+    return text
+
+
+def normalize_optional_text(value: Any, max_chars: int) -> str:
+    text = str(value or "").strip()
+    if len(text) > max_chars:
+        return text[:max_chars].rstrip()
+    return text
 
 
 @dataclass(frozen=True)
@@ -1794,6 +1856,7 @@ def build_result(
     reference_answer: str,
     finish_reason: str | None,
     verifier_model: str,
+    cancel_event: threading.Event | None = None,
 ) -> Dict[str, Any]:
     prompt_tokens = parse_usage_int(usage.get("prompt_tokens"))
     completion_tokens = parse_usage_int(usage.get("completion_tokens"))
@@ -1807,7 +1870,17 @@ def build_result(
     if prompt_tokens is not None and completion_tokens is not None:
         cost_yuan = round(compute_cost_yuan(prompt_tokens, completion_tokens, config), 6)
 
-    correctness = verify_answer(question_text, reference_answer, answer_text, verifier_model=verifier_model)
+    if cancel_event and cancel_event.is_set():
+        correctness = {
+            "status": "cancelled",
+            "label": "Cancelled",
+            "reference_answer": reference_answer,
+            "verifier_model": verifier_model,
+            "verdict": "CANCELLED",
+            "verifier_response": "",
+        }
+    else:
+        correctness = verify_answer(question_text, reference_answer, answer_text, verifier_model=verifier_model)
     stop_info = summarize_stop_reason(finish_reason, "\n".join([reasoning_text or "", answer_text or ""]))
 
     return {
@@ -2076,6 +2149,7 @@ def call_model(
     config: ModelConfig,
     reference_answer: str,
     verifier_model: str,
+    cancel_event: threading.Event | None = None,
 ) -> Dict[str, Any]:
     opener = build_opener()
     timeout_seconds = get_timeout_seconds()
@@ -2083,11 +2157,15 @@ def call_model(
     parsed = None
     last_error = ""
     for attempt in range(1, max_retries + 1):
+        if cancel_event and cancel_event.is_set():
+            raise RunCancelledError("Run cancelled after the client disconnected.")
         try:
             with opener.open(make_api_request(prompt_text, config, stream=False), timeout=timeout_seconds) as response:
                 parsed = json.loads(response.read().decode("utf-8"))
             break
         except Exception as exc:
+            if cancel_event and cancel_event.is_set():
+                raise RunCancelledError("Run cancelled after the client disconnected.") from exc
             last_error = format_upstream_error(exc)
             if attempt >= max_retries or not is_retryable_upstream_error(exc, last_error):
                 raise RuntimeError(f"Upstream API request failed after {max_retries} attempts: {last_error}") from exc
@@ -2109,6 +2187,7 @@ def call_model(
         reference_answer=reference_answer,
         finish_reason=choice.get("finish_reason"),
         verifier_model=verifier_model,
+        cancel_event=cancel_event,
     )
 
 
@@ -2121,9 +2200,17 @@ def stream_model(
     on_delta: Callable[[str, str], None],
     on_retry: Callable[[int, int, str], None],
     on_fallback: Callable[[str], None],
+    cancel_event: threading.Event | None = None,
 ) -> Dict[str, Any]:
     if config.prefer_standard_request:
-        return call_model(question_text, prompt_text, config, reference_answer, verifier_model)
+        return call_model(
+            question_text,
+            prompt_text,
+            config,
+            reference_answer,
+            verifier_model,
+            cancel_event=cancel_event,
+        )
 
     opener = build_opener()
     timeout_seconds = get_timeout_seconds()
@@ -2131,6 +2218,8 @@ def stream_model(
     last_error = ""
 
     for attempt in range(1, max_retries + 1):
+        if cancel_event and cancel_event.is_set():
+            raise RunCancelledError("Run cancelled after the client disconnected.")
         reasoning_parts: list[str] = []
         answer_parts: list[str] = []
         usage: Dict[str, Any] = {}
@@ -2144,6 +2233,8 @@ def stream_model(
         try:
             with opener.open(make_api_request(prompt_text, config, stream=True), timeout=timeout_seconds) as response:
                 for raw_line in response:
+                    if cancel_event and cancel_event.is_set():
+                        raise RunCancelledError("Run cancelled after the client disconnected.")
                     line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
                     if not line.startswith("data:"):
                         continue
@@ -2180,8 +2271,11 @@ def stream_model(
                 reference_answer=reference_answer,
                 finish_reason=finish_reason,
                 verifier_model=verifier_model,
+                cancel_event=cancel_event,
             )
         except Exception as exc:
+            if isinstance(exc, RunCancelledError) or (cancel_event and cancel_event.is_set()):
+                raise RunCancelledError("Run cancelled after the client disconnected.") from exc
             last_error = format_upstream_error(exc)
             if attempt >= max_retries or not is_retryable_upstream_error(exc, last_error):
                 break
@@ -2189,8 +2283,17 @@ def stream_model(
             time.sleep(retry_sleep_seconds(attempt))
 
     on_fallback(last_error)
+    if cancel_event and cancel_event.is_set():
+        raise RunCancelledError("Run cancelled after the client disconnected.")
     try:
-        return call_model(question_text, prompt_text, config, reference_answer, verifier_model)
+        return call_model(
+            question_text,
+            prompt_text,
+            config,
+            reference_answer,
+            verifier_model,
+            cancel_event=cancel_event,
+        )
     except Exception as exc:
         fallback_error = format_upstream_error(exc)
         raise RuntimeError(
@@ -2236,6 +2339,13 @@ class DemoHandler(SimpleHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), format % args))
 
+    def end_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        super().end_headers()
+
     def _send_json(self, payload: Dict[str, Any], status: int = HTTPStatus.OK) -> None:
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -2261,6 +2371,8 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length > MAX_REQUEST_BYTES:
+            raise RequestTooLarge(MAX_REQUEST_BYTES)
         body = self.rfile.read(content_length).decode("utf-8") if content_length else "{}"
         return json.loads(body or "{}")
 
@@ -2268,18 +2380,16 @@ class DemoHandler(SimpleHTTPRequestHandler):
         header_order = (
             "CF-Connecting-IP",
             "True-Client-IP",
-            "X-Forwarded-For",
-            "X-Real-IP",
             "Fly-Client-IP",
         )
         for header in header_order:
-            raw_value = (self.headers.get(header) or "").strip()
-            if not raw_value:
-                continue
-            candidate = raw_value.split(",")[0].strip()
-            if candidate and candidate.lower() != "unknown":
+            candidate = extract_trusted_client_ip((self.headers.get(header) or "").strip())
+            if candidate:
                 return candidate
-        return self.client_address[0]
+        forwarded = extract_trusted_client_ip((self.headers.get("X-Forwarded-For") or "").strip(), prefer_last=True)
+        if forwarded:
+            return forwarded
+        return extract_trusted_client_ip(self.client_address[0]) or self.client_address[0]
 
     def _run_quota_payload(self) -> Dict[str, Any]:
         return self.server.run_quota_store.snapshot(self._client_ip())
@@ -2303,29 +2413,45 @@ class DemoHandler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def _build_retrieved_preview(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        question = (payload.get("question") or "").strip()
-        reference_answer = (payload.get("referenceAnswer") or payload.get("answer") or "").strip()
-        if not question:
-            raise ValueError("Custom mode requires a question.")
-        if not reference_answer:
-            raise ValueError("Custom mode requires a reference answer.")
+        example_id = str(payload.get("id") or "").strip()
+        source_mode = (payload.get("sourceMode") or "").strip() or "custom"
+        example = self.server.examples_by_id.get(example_id) if source_mode == "example" else None
+        if example:
+            question = example["question"]
+            reference_answer = example["answer"]
+            title = example.get("title") or ""
+            subtitle = example.get("subtitle") or ""
+            topic = example.get("topic") or "Example"
+            difficulty = example.get("difficulty") or ""
+            question_id = example.get("questionId") or ""
+            benchmark_stats = deepcopy(example.get("benchmarkDirectStats")) or None
+        else:
+            question = normalize_required_text(payload.get("question"), "Question", MAX_CUSTOM_QUESTION_CHARS)
+            reference_answer = normalize_required_text(
+                payload.get("referenceAnswer") or payload.get("answer"),
+                "Reference answer",
+                MAX_REFERENCE_ANSWER_CHARS,
+            )
+            title = normalize_optional_text(payload.get("title"), MAX_OPTIONAL_FIELD_CHARS)
+            subtitle = normalize_optional_text(payload.get("subtitle"), MAX_OPTIONAL_FIELD_CHARS)
+            topic = normalize_optional_text(payload.get("topic"), MAX_OPTIONAL_FIELD_CHARS) or "Custom Input"
+            difficulty = normalize_optional_text(payload.get("difficulty"), MAX_OPTIONAL_FIELD_CHARS) or "User"
+            question_id = normalize_optional_text(payload.get("questionId"), MAX_OPTIONAL_FIELD_CHARS)
+            benchmark_stats = deepcopy((self.server.examples_by_id.get(example_id, {}) or {}).get("benchmarkDirectStats")) or None
         dataset_ids = resolve_skill_dataset_ids(payload.get("skillDatasetIds"), self.server.skill_corpora)
         retrieval = retrieve_skill_entry(question, reference_answer, self.server.skill_corpora, dataset_ids)
         return build_preview_example(
             {
-                "id": payload.get("id") or "custom-problem",
-                "questionId": payload.get("questionId") or "",
-                "title": payload.get("title") or "",
-                "subtitle": payload.get("subtitle") or "",
-                "topic": payload.get("topic") or "Custom Input",
-                "difficulty": payload.get("difficulty") or "User",
-                "benchmarkDirectStats": deepcopy(
-                    (self.server.examples_by_id.get(payload.get("id") or "", {}) or {}).get("benchmarkDirectStats")
-                )
-                or None,
+                "id": example_id or "custom-problem",
+                "questionId": question_id,
+                "title": title,
+                "subtitle": subtitle,
+                "topic": topic,
+                "difficulty": difficulty,
+                "benchmarkDirectStats": benchmark_stats,
                 "question": question,
                 "answer": reference_answer,
-                "sourceMode": payload.get("sourceMode") or "custom",
+                "sourceMode": "example" if example else source_mode,
             },
             retrieval,
         )
@@ -2337,15 +2463,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
             raise ValueError(f"Unsupported modelId: {model_id}")
 
         if payload.get("question") or payload.get("referenceAnswer") or payload.get("answer"):
-            skill_text = (payload.get("skillText") or "").strip()
-            skill_score = payload.get("skillScore")
             preview = self._build_retrieved_preview(payload)
-            if "skillText" in payload:
-                for archived in preview["archived"].values():
-                    archived["trs"]["skill_text"] = skill_text
-                    archived["trs"]["skill_score"] = float(skill_score or 0.0)
-                preview["skillText"] = skill_text
-                preview["skillScore"] = float(skill_score or 0.0)
             return preview, MODEL_CONFIGS[model_id]
 
         example_id = payload.get("exampleId", "")
@@ -2394,8 +2512,11 @@ class DemoHandler(SimpleHTTPRequestHandler):
         events: queue.Queue[tuple[str, Dict[str, Any]]] = queue.Queue()
         results: Dict[str, Dict[str, Any]] = {}
         failures: list[str] = []
+        cancel_event = threading.Event()
 
         def emit(event_name: str, payload: Dict[str, Any]) -> None:
+            if cancel_event.is_set():
+                return
             if run_id is not None and "runId" not in payload:
                 payload = {
                     "runId": run_id,
@@ -2429,11 +2550,14 @@ class DemoHandler(SimpleHTTPRequestHandler):
                             "error": error_message,
                         },
                     ),
+                    cancel_event=cancel_event,
                 )
                 if lane == "trs":
                     result["skill_text"] = skill_text
                     result["skill_score"] = archived["trs"]["skill_score"]
                 emit("lane_result", {"lane": lane, "result": result})
+            except RunCancelledError:
+                emit("lane_cancelled", {"lane": lane})
             except Exception as exc:
                 emit("lane_error", {"lane": lane, "error": str(exc)})
 
@@ -2451,11 +2575,14 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 if event_name == "lane_result":
                     results[payload["lane"]] = payload["result"]
                     completed_lanes += 1
+                elif event_name == "lane_cancelled":
+                    completed_lanes += 1
                 elif event_name == "lane_error":
                     failures.append(payload["error"])
                     completed_lanes += 1
                 self._send_sse_event(event_name, payload)
             except BrokenPipeError:
+                cancel_event.set()
                 return
 
         for thread in threads:
@@ -2476,10 +2603,12 @@ class DemoHandler(SimpleHTTPRequestHandler):
             self._send_sse_event("done", {"runId": run_id, "ok": not failures})
             self.close_connection = True
         except BrokenPipeError:
+            cancel_event.set()
             return
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        run_slot_acquired = False
 
         try:
             payload = self._read_json_body()
@@ -2496,6 +2625,9 @@ class DemoHandler(SimpleHTTPRequestHandler):
             run_quota = None
 
             if parsed.path in {"/api/run", "/api/run_stream"}:
+                if not self.server.run_capacity.acquire(blocking=False):
+                    raise RunCapacityExceeded(self.server.max_concurrent_runs)
+                run_slot_acquired = True
                 run_quota = self.server.run_quota_store.consume(self._client_ip())
 
             if parsed.path == "/api/run":
@@ -2516,8 +2648,16 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 return
 
             self._send_json({"error": f"Unknown endpoint: {parsed.path}"}, status=HTTPStatus.NOT_FOUND)
-        except ValueError as exc:
-            self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+        except RequestTooLarge as exc:
+            self._send_json(
+                {"ok": False, "code": "request_too_large", "error": str(exc)},
+                status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+        except RunCapacityExceeded as exc:
+            self._send_json(
+                {"ok": False, "code": "run_capacity_exceeded", "error": str(exc)},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
         except RunQuotaExceeded as exc:
             self._send_json(
                 {
@@ -2528,8 +2668,13 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 },
                 status=HTTPStatus.TOO_MANY_REQUESTS,
             )
+        except ValueError as exc:
+            self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
         except Exception as exc:
             self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+        finally:
+            if run_slot_acquired:
+                self.server.run_capacity.release()
 
 
 class DemoServer(ThreadingHTTPServer):
@@ -2547,6 +2692,8 @@ class DemoServer(ThreadingHTTPServer):
             max_runs=RUN_QUOTA_MAX_RUNS,
             window_seconds=RUN_QUOTA_WINDOW_SECONDS,
         )
+        self.max_concurrent_runs = MAX_CONCURRENT_RUNS
+        self.run_capacity = threading.BoundedSemaphore(MAX_CONCURRENT_RUNS)
         self.examples_payload["skillDatasets"] = {
             "defaultSelectedIds": list(
                 resolve_skill_dataset_ids(DEFAULT_SELECTED_SKILL_DATASET_IDS, self.skill_corpora)
@@ -2565,6 +2712,9 @@ class DemoServer(ThreadingHTTPServer):
         self.examples_payload["runQuotaConfig"] = {
             "limit": RUN_QUOTA_MAX_RUNS,
             "windowSeconds": RUN_QUOTA_WINDOW_SECONDS,
+        }
+        self.examples_payload["runCapacityConfig"] = {
+            "maxConcurrentRuns": MAX_CONCURRENT_RUNS,
         }
 
 
