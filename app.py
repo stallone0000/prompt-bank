@@ -43,6 +43,7 @@ MAX_CUSTOM_QUESTION_CHARS = max(256, int(os.environ.get("TRS_DEMO_MAX_CUSTOM_QUE
 MAX_REFERENCE_ANSWER_CHARS = max(32, int(os.environ.get("TRS_DEMO_MAX_REFERENCE_ANSWER_CHARS", "4000")))
 MAX_OPTIONAL_FIELD_CHARS = max(32, int(os.environ.get("TRS_DEMO_MAX_OPTIONAL_FIELD_CHARS", "240")))
 MAX_CONCURRENT_RUNS = max(1, int(os.environ.get("TRS_DEMO_MAX_CONCURRENT_RUNS", "2")))
+MAX_CONCURRENT_RETRIEVALS = max(1, int(os.environ.get("TRS_DEMO_MAX_CONCURRENT_RETRIEVALS", "2")))
 DEEPMATH_SKILL_CORPUS_CANDIDATES = (
     {
         "path": DEEPMATH_SKILL_CORPUS_PATH,
@@ -271,6 +272,12 @@ class RunCapacityExceeded(RuntimeError):
     def __init__(self, capacity: int) -> None:
         self.capacity = capacity
         super().__init__(f"The demo is busy right now. Please retry in a moment. ({capacity} active runs max)")
+
+
+class RetrievalCapacityExceeded(RuntimeError):
+    def __init__(self, capacity: int) -> None:
+        self.capacity = capacity
+        super().__init__(f"Skill retrieval is busy right now. Please retry in a moment. ({capacity} active retrievals max)")
 
 
 class RunCancelledError(RuntimeError):
@@ -2609,11 +2616,15 @@ class DemoHandler(SimpleHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         run_slot_acquired = False
+        retrieval_slot_acquired = False
 
         try:
             payload = self._read_json_body()
 
             if parsed.path == "/api/retrieve_skill":
+                if not self.server.retrieve_capacity.acquire(blocking=False):
+                    raise RetrievalCapacityExceeded(self.server.max_concurrent_retrievals)
+                retrieval_slot_acquired = True
                 preview = self._build_retrieved_preview(payload)
                 serialized = serialize_preview(preview)
                 self._send_json({"ok": True, "preview": serialized, "custom": serialized})
@@ -2658,6 +2669,11 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 {"ok": False, "code": "run_capacity_exceeded", "error": str(exc)},
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
             )
+        except RetrievalCapacityExceeded as exc:
+            self._send_json(
+                {"ok": False, "code": "retrieve_capacity_exceeded", "error": str(exc)},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
         except RunQuotaExceeded as exc:
             self._send_json(
                 {
@@ -2675,6 +2691,8 @@ class DemoHandler(SimpleHTTPRequestHandler):
         finally:
             if run_slot_acquired:
                 self.server.run_capacity.release()
+            if retrieval_slot_acquired:
+                self.server.retrieve_capacity.release()
 
 
 class DemoServer(ThreadingHTTPServer):
@@ -2694,6 +2712,8 @@ class DemoServer(ThreadingHTTPServer):
         )
         self.max_concurrent_runs = MAX_CONCURRENT_RUNS
         self.run_capacity = threading.BoundedSemaphore(MAX_CONCURRENT_RUNS)
+        self.max_concurrent_retrievals = MAX_CONCURRENT_RETRIEVALS
+        self.retrieve_capacity = threading.BoundedSemaphore(MAX_CONCURRENT_RETRIEVALS)
         self.examples_payload["skillDatasets"] = {
             "defaultSelectedIds": list(
                 resolve_skill_dataset_ids(DEFAULT_SELECTED_SKILL_DATASET_IDS, self.skill_corpora)
@@ -2715,6 +2735,7 @@ class DemoServer(ThreadingHTTPServer):
         }
         self.examples_payload["runCapacityConfig"] = {
             "maxConcurrentRuns": MAX_CONCURRENT_RUNS,
+            "maxConcurrentRetrievals": MAX_CONCURRENT_RETRIEVALS,
         }
 
 
