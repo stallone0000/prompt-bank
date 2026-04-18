@@ -40,11 +40,13 @@ const state = {
   streamSawLaneOutput: false,
   streamAbortController: null,
   userStopped: false,
+  runQuota: null,
 };
 
 const STREAM_CONNECT_MAX_RETRIES = 4;
 const RUN_RESTART_MAX_RETRIES = 3;
 const TYPESET_DEBOUNCE_MS = 140;
+const RUN_QUOTA_REFRESH_MS = 30000;
 
 let pendingTypesetTimer = 0;
 const pendingTypesetTargets = new Set();
@@ -80,6 +82,8 @@ const nodes = {
   verifierModel: document.getElementById("verifierModel"),
   skillCardSource: document.getElementById("skillCardSource"),
   skillCard: document.getElementById("skillCard"),
+  runQuotaChip: document.getElementById("runQuotaChip"),
+  runQuotaSummary: document.getElementById("runQuotaSummary"),
   runStatus: document.getElementById("runStatus"),
   liveSummary: document.getElementById("liveSummary"),
   directMetrics: document.getElementById("directMetrics"),
@@ -203,6 +207,90 @@ function availableSkillDatasetIds() {
 
 function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function formatShortDuration(totalSeconds) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+    return "soon";
+  }
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${Math.max(1, minutes)}m`;
+}
+
+function refreshRunQuotaClock() {
+  if (!state.runQuota) {
+    return null;
+  }
+  if (!Number.isFinite(state.runQuota.resetAtMs) || !state.runQuota.resetAtMs) {
+    return state.runQuota;
+  }
+  const remainingMs = state.runQuota.resetAtMs - Date.now();
+  if (remainingMs <= 0) {
+    state.runQuota = {
+      ...state.runQuota,
+      used: 0,
+      remaining: state.runQuota.limit,
+      resetAtMs: null,
+      resetInSeconds: null,
+      exhausted: false,
+      message: `${state.runQuota.limit}/${state.runQuota.limit} runs remaining in the current 24-hour window.`,
+    };
+    return state.runQuota;
+  }
+  state.runQuota = {
+    ...state.runQuota,
+    resetInSeconds: Math.max(0, Math.ceil(remainingMs / 1000)),
+    exhausted: state.runQuota.remaining <= 0,
+  };
+  return state.runQuota;
+}
+
+function applyRunQuota(quota) {
+  if (!quota || typeof quota !== "object") {
+    return;
+  }
+  state.runQuota = quota;
+  renderRunQuota();
+}
+
+function renderRunQuota() {
+  if (!nodes.runQuotaSummary || !nodes.runQuotaChip) {
+    return;
+  }
+  const quota = refreshRunQuotaClock();
+  if (!quota) {
+    nodes.runQuotaSummary.textContent = "-";
+    nodes.runQuotaChip.title = "";
+    nodes.runQuotaChip.classList.remove("exhausted");
+    return;
+  }
+  nodes.runQuotaSummary.textContent = `${quota.remaining}/${quota.limit}`;
+  nodes.runQuotaChip.classList.toggle("exhausted", Boolean(quota.exhausted));
+  if (quota.exhausted && Number.isFinite(quota.resetInSeconds)) {
+    nodes.runQuotaChip.title = `Daily limit reached. Resets in ${formatShortDuration(quota.resetInSeconds)}.`;
+    return;
+  }
+  if (quota.used > 0 && Number.isFinite(quota.resetInSeconds)) {
+    nodes.runQuotaChip.title = `${quota.remaining} of ${quota.limit} runs left. Window resets in ${formatShortDuration(quota.resetInSeconds)}.`;
+    return;
+  }
+  nodes.runQuotaChip.title = `${quota.limit} runs available per 24-hour window.`;
+}
+
+function quotaLimitMessage() {
+  const quota = refreshRunQuotaClock();
+  if (!quota || !quota.exhausted) {
+    return "";
+  }
+  if (Number.isFinite(quota.resetInSeconds)) {
+    return `Daily run limit reached for this IP. Try again in ${formatShortDuration(quota.resetInSeconds)}.`;
+  }
+  return "Daily run limit reached for this IP.";
 }
 
 function typesetMath(targets = []) {
@@ -1557,7 +1645,8 @@ function seedLaneFallback(lane) {
 }
 
 function resetRunControls() {
-  nodes.runButton.disabled = false;
+  refreshRunQuotaClock();
+  nodes.runButton.disabled = Boolean(state.runQuota?.exhausted);
   nodes.runButton.textContent = "Run";
   nodes.stopButton.disabled = true;
 }
@@ -1642,6 +1731,7 @@ function handleStreamEvent(eventName, payload) {
   switch (eventName) {
     case "meta":
       state.activeModel = payload.model;
+      applyRunQuota(payload.runQuota);
       if (payload.mode === "custom" && state.customContext) {
         state.customContext = {
           ...state.customContext,
@@ -1824,10 +1914,16 @@ async function openRunStreamResponse(signal, runId) {
 
       if (!response.ok) {
         let errorMessage = `Request failed with status ${response.status}`;
+        let payload = null;
         try {
-          const payload = await response.json();
+          payload = await response.json();
           errorMessage = payload.error || errorMessage;
+          applyRunQuota(payload.runQuota);
         } catch {}
+
+        if (payload?.code === "run_quota_exceeded") {
+          throw new Error(errorMessage);
+        }
 
         if (attempt < STREAM_CONNECT_MAX_RETRIES && isRetryableStreamStatus(response.status)) {
           lastError = new Error(errorMessage);
@@ -1856,6 +1952,12 @@ async function openRunStreamResponse(signal, runId) {
 
 async function runComparison() {
   if (state.running) {
+    return;
+  }
+  refreshRunQuotaClock();
+  if (state.runQuota?.exhausted) {
+    nodes.runStatus.textContent = quotaLimitMessage() || "Daily run limit reached for this IP.";
+    resetRunControls();
     return;
   }
 
@@ -1940,7 +2042,10 @@ async function runComparison() {
     if (state.userStopped || error?.name === "AbortError") {
       return;
     }
-    nodes.runStatus.textContent = `Live run failed: ${error.message}`;
+    nodes.runStatus.textContent =
+      state.runQuota?.exhausted && error?.message
+        ? error.message
+        : `Live run failed: ${error.message}`;
     setLaneStreaming("direct", false);
     setLaneStreaming("trs", false);
   } finally {
@@ -1957,6 +2062,7 @@ async function runComparison() {
 async function boot() {
   const response = await fetch("/api/examples");
   state.payload = await response.json();
+  applyRunQuota(state.payload.runQuota);
   state.exampleId =
     state.payload.exampleGroups?.[0]?.optionIds?.[0] || state.payload.examples?.[0]?.id || null;
   closeExampleGroups();
@@ -1977,6 +2083,7 @@ async function boot() {
   renderExamples();
   renderSelection();
   clearLiveResults();
+  renderRunQuota();
   updateCustomApplyState();
   nodes.runButton.addEventListener("click", runComparison);
   nodes.stopButton.addEventListener("click", stopRun);
@@ -2007,7 +2114,19 @@ async function boot() {
       clearComparison("Switched verifier model. Previous run cleared.");
     }
   });
-  nodes.stopButton.disabled = true;
+  window.setInterval(() => {
+    if (!state.runQuota) {
+      return;
+    }
+    renderRunQuota();
+    if (!state.running) {
+      resetRunControls();
+    }
+  }, RUN_QUOTA_REFRESH_MS);
+  resetRunControls();
+  if (state.runQuota?.exhausted) {
+    nodes.runStatus.textContent = quotaLimitMessage() || nodes.runStatus.textContent;
+  }
   await prepareExamplePreview({ clearResults: false });
 }
 

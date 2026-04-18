@@ -260,6 +260,36 @@ a {
   border-color: var(--line-strong);
 }
 
+.run-quota-chip {
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
+.run-quota-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.run-quota-chip strong {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.run-quota-chip.exhausted {
+  border-color: rgba(207, 64, 47, 0.28);
+  background: var(--danger-soft);
+}
+
+.run-quota-chip.exhausted .run-quota-label,
+.run-quota-chip.exhausted strong {
+  color: var(--danger);
+}
+
 .topbar-chip.subtle {
   color: var(--muted);
 }

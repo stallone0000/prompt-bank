@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import math
 import os
@@ -31,7 +32,11 @@ EXAMPLE_PREVIEW_MAP_PATH = APP_DIR / "data" / "example_preview_map.json"
 BENCHMARK_DIRECT_ACCURACY_PATH = APP_DIR / "data" / "benchmark_direct_accuracy.json"
 DEEPMATH_SKILL_CORPUS_PATH = APP_DIR / "data" / "deepmath_103k_oss_skill_corpus.jsonl.gz"
 AOPS_SKILL_CORPUS_PATH = APP_DIR / "data" / "aops_skill_corpus.jsonl.gz"
+RUN_QUOTA_STORE_PATH = APP_DIR / "data" / "run_quota_store.json"
 LEGACY_SKILL_CORPUS_PATH = APP_DIR / "data" / "trs_skill_corpus.jsonl"
+RUN_QUOTA_MAX_RUNS = max(1, int(os.environ.get("TRS_DEMO_RUN_QUOTA_MAX_RUNS", "30")))
+RUN_QUOTA_WINDOW_SECONDS = max(60, int(os.environ.get("TRS_DEMO_RUN_QUOTA_WINDOW_SECONDS", "86400")))
+RUN_QUOTA_HASH_SALT = os.environ.get("TRS_DEMO_RUN_QUOTA_SALT", "trs-demo-run-quota")
 DEEPMATH_SKILL_CORPUS_CANDIDATES = (
     {
         "path": DEEPMATH_SKILL_CORPUS_PATH,
@@ -242,6 +247,123 @@ Candidate model answer:
 
 Respond with exactly one token: CORRECT or INCORRECT.
 """.strip()
+
+
+class RunQuotaExceeded(RuntimeError):
+    def __init__(self, status: Dict[str, Any]) -> None:
+        self.status = status
+        super().__init__(status.get("message") or "Daily run limit reached.")
+
+
+class RunQuotaStore:
+    def __init__(self, path: Path, *, max_runs: int, window_seconds: int) -> None:
+        self.path = path
+        self.max_runs = max_runs
+        self.window_seconds = window_seconds
+        self.lock = threading.Lock()
+        self.records = self._load_records()
+
+    def _load_records(self) -> Dict[str, Dict[str, Any]]:
+        if not self.path.exists():
+            return {}
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        records = payload.get("records") if isinstance(payload, dict) else {}
+        return records if isinstance(records, dict) else {}
+
+    def _save_records_locked(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": 1,
+            "maxRuns": self.max_runs,
+            "windowSeconds": self.window_seconds,
+            "records": self.records,
+        }
+        tmp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp_path.replace(self.path)
+
+    def _hash_ip(self, client_ip: str) -> str:
+        return hashlib.sha256(f"{RUN_QUOTA_HASH_SALT}:{client_ip}".encode("utf-8")).hexdigest()
+
+    def _prune_expired_locked(self, now: float) -> bool:
+        stale_keys = [
+            key
+            for key, record in self.records.items()
+            if now >= float(record.get("reset_at") or 0)
+        ]
+        if not stale_keys:
+            return False
+        for key in stale_keys:
+            self.records.pop(key, None)
+        return True
+
+    def _status_from_record(self, record: Dict[str, Any] | None, now: float) -> Dict[str, Any]:
+        used = int(record.get("used") or 0) if record else 0
+        reset_at = float(record.get("reset_at") or 0) if record else 0
+        if not record or now >= reset_at:
+            used = 0
+            reset_at = 0
+        remaining = max(0, self.max_runs - used)
+        reset_in_seconds = max(0, int(math.ceil(reset_at - now))) if reset_at else None
+        return {
+            "limit": self.max_runs,
+            "used": used,
+            "remaining": remaining,
+            "windowSeconds": self.window_seconds,
+            "resetAtMs": int(reset_at * 1000) if reset_at else None,
+            "resetInSeconds": reset_in_seconds,
+            "exhausted": remaining <= 0,
+            "message": self._build_message(remaining, used, reset_in_seconds),
+        }
+
+    def _build_message(self, remaining: int, used: int, reset_in_seconds: int | None) -> str:
+        if remaining > 0:
+            return f"{remaining}/{self.max_runs} runs remaining in the current 24-hour window."
+        if reset_in_seconds:
+            hours, remainder = divmod(reset_in_seconds, 3600)
+            minutes = remainder // 60
+            if hours:
+                return f"Daily run limit reached for this IP ({used}/{self.max_runs}). Try again in {hours}h {minutes}m."
+            return f"Daily run limit reached for this IP ({used}/{self.max_runs}). Try again in {max(1, minutes)}m."
+        return f"Daily run limit reached for this IP ({used}/{self.max_runs})."
+
+    def snapshot(self, client_ip: str) -> Dict[str, Any]:
+        now = time.time()
+        key = self._hash_ip(client_ip)
+        with self.lock:
+            if self._prune_expired_locked(now):
+                self._save_records_locked()
+            return self._status_from_record(self.records.get(key), now)
+
+    def consume(self, client_ip: str) -> Dict[str, Any]:
+        now = time.time()
+        key = self._hash_ip(client_ip)
+        with self.lock:
+            mutated = self._prune_expired_locked(now)
+            record = self.records.get(key)
+            if not record or now >= float(record.get("reset_at") or 0):
+                record = {
+                    "used": 0,
+                    "window_started_at": now,
+                    "reset_at": now + self.window_seconds,
+                }
+                self.records[key] = record
+                mutated = True
+
+            status = self._status_from_record(record, now)
+            if status["remaining"] <= 0:
+                if mutated:
+                    self._save_records_locked()
+                raise RunQuotaExceeded(status)
+
+            record["used"] = int(record.get("used") or 0) + 1
+            record["last_used_at"] = now
+            self.records[key] = record
+            self._save_records_locked()
+            return self._status_from_record(record, now)
 
 
 @dataclass(frozen=True)
@@ -2142,6 +2264,26 @@ class DemoHandler(SimpleHTTPRequestHandler):
         body = self.rfile.read(content_length).decode("utf-8") if content_length else "{}"
         return json.loads(body or "{}")
 
+    def _client_ip(self) -> str:
+        header_order = (
+            "CF-Connecting-IP",
+            "True-Client-IP",
+            "X-Forwarded-For",
+            "X-Real-IP",
+            "Fly-Client-IP",
+        )
+        for header in header_order:
+            raw_value = (self.headers.get(header) or "").strip()
+            if not raw_value:
+                continue
+            candidate = raw_value.split(",")[0].strip()
+            if candidate and candidate.lower() != "unknown":
+                return candidate
+        return self.client_address[0]
+
+    def _run_quota_payload(self) -> Dict[str, Any]:
+        return self.server.run_quota_store.snapshot(self._client_ip())
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
@@ -2149,7 +2291,11 @@ class DemoHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/examples":
-            self._send_json(self.server.examples_payload)
+            payload = {
+                **self.server.examples_payload,
+                "runQuota": self._run_quota_payload(),
+            }
+            self._send_json(payload)
             return
 
         if parsed.path == "/":
@@ -2215,6 +2361,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
         config: ModelConfig,
         verifier_model: str,
         run_id: int | None,
+        run_quota: Dict[str, Any],
     ) -> None:
         question = example["question"]
         reference_answer = example["answer"]
@@ -2240,6 +2387,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 "retrievedSkill": skill_text,
                 "model": model_payload(config),
                 "referenceAnswer": reference_answer,
+                "runQuota": run_quota,
             },
         )
 
@@ -2345,6 +2493,10 @@ class DemoHandler(SimpleHTTPRequestHandler):
             example, config = self._resolve_request(payload)
             verifier_model = resolve_verifier_model(payload.get("verifierModelId"))
             run_id = payload.get("runId")
+            run_quota = None
+
+            if parsed.path in {"/api/run", "/api/run_stream"}:
+                run_quota = self.server.run_quota_store.consume(self._client_ip())
 
             if parsed.path == "/api/run":
                 live = serialize_live_comparison(example, config, verifier_model)
@@ -2354,17 +2506,28 @@ class DemoHandler(SimpleHTTPRequestHandler):
                         "exampleId": example["id"],
                         "mode": "custom" if example["id"] == "custom-problem" else "example",
                         "live": live,
+                        "runQuota": run_quota,
                     }
                 )
                 return
 
             if parsed.path == "/api/run_stream":
-                self._handle_stream_run(example, config, verifier_model, run_id)
+                self._handle_stream_run(example, config, verifier_model, run_id, run_quota or self._run_quota_payload())
                 return
 
             self._send_json({"error": f"Unknown endpoint: {parsed.path}"}, status=HTTPStatus.NOT_FOUND)
         except ValueError as exc:
             self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+        except RunQuotaExceeded as exc:
+            self._send_json(
+                {
+                    "ok": False,
+                    "code": "run_quota_exceeded",
+                    "error": str(exc),
+                    "runQuota": exc.status,
+                },
+                status=HTTPStatus.TOO_MANY_REQUESTS,
+            )
         except Exception as exc:
             self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -2379,6 +2542,11 @@ class DemoServer(ThreadingHTTPServer):
             self.examples_by_id
         )
         self.skill_corpora = build_skill_corpora(payload)
+        self.run_quota_store = RunQuotaStore(
+            RUN_QUOTA_STORE_PATH,
+            max_runs=RUN_QUOTA_MAX_RUNS,
+            window_seconds=RUN_QUOTA_WINDOW_SECONDS,
+        )
         self.examples_payload["skillDatasets"] = {
             "defaultSelectedIds": list(
                 resolve_skill_dataset_ids(DEFAULT_SELECTED_SKILL_DATASET_IDS, self.skill_corpora)
@@ -2393,6 +2561,10 @@ class DemoServer(ThreadingHTTPServer):
                 for option in SKILL_DATASET_OPTIONS
                 if option["id"] in self.skill_corpora
             ],
+        }
+        self.examples_payload["runQuotaConfig"] = {
+            "limit": RUN_QUOTA_MAX_RUNS,
+            "windowSeconds": RUN_QUOTA_WINDOW_SECONDS,
         }
 
 
