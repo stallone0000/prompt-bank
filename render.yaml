@@ -10,5 +10,7 @@ services:
     envVars:
       - key: TRS_DEMO_API_KEY
         sync: false
+      - key: TRS_DEMO_REDIS_URL
+        sync: false
       - key: TRS_DEMO_PROXY_URL
         sync: false

@@ -4,3 +4,4 @@ __pycache__/
 .env
 .env.*
 !.env.example
+data/run_quota_store.json

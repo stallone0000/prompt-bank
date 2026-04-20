@@ -24,6 +24,11 @@ from typing import Any, Callable, Dict
 from urllib import error, request
 from urllib.parse import urlparse
 
+try:
+    import redis as redis_lib
+except ImportError:
+    redis_lib = None
+
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
@@ -35,9 +40,13 @@ DEEPMATH_SKILL_CORPUS_PATH = APP_DIR / "data" / "deepmath_103k_oss_skill_corpus.
 AOPS_SKILL_CORPUS_PATH = APP_DIR / "data" / "aops_skill_corpus.jsonl.gz"
 RUN_QUOTA_STORE_PATH = APP_DIR / "data" / "run_quota_store.json"
 LEGACY_SKILL_CORPUS_PATH = APP_DIR / "data" / "trs_skill_corpus.jsonl"
-RUN_QUOTA_MAX_RUNS = max(1, int(os.environ.get("TRS_DEMO_RUN_QUOTA_MAX_RUNS", "30")))
+RUN_QUOTA_MAX_RUNS = max(1, int(os.environ.get("TRS_DEMO_RUN_QUOTA_MAX_RUNS", "10")))
 RUN_QUOTA_WINDOW_SECONDS = max(60, int(os.environ.get("TRS_DEMO_RUN_QUOTA_WINDOW_SECONDS", "86400")))
 RUN_QUOTA_HASH_SALT = os.environ.get("TRS_DEMO_RUN_QUOTA_SALT", "trs-demo-run-quota")
+RUN_QUOTA_REDIS_URL = (os.environ.get("TRS_DEMO_REDIS_URL") or os.environ.get("REDIS_URL") or "").strip()
+RUN_QUOTA_REDIS_KEY_PREFIX = (
+    os.environ.get("TRS_DEMO_REDIS_PREFIX", "trs-demo:run-quota").strip() or "trs-demo:run-quota"
+)
 MAX_REQUEST_BYTES = max(4096, int(os.environ.get("TRS_DEMO_MAX_REQUEST_BYTES", str(128 * 1024))))
 MAX_CUSTOM_QUESTION_CHARS = max(256, int(os.environ.get("TRS_DEMO_MAX_CUSTOM_QUESTION_CHARS", "16000")))
 MAX_REFERENCE_ANSWER_CHARS = max(32, int(os.environ.get("TRS_DEMO_MAX_REFERENCE_ANSWER_CHARS", "4000")))
@@ -393,6 +402,108 @@ class RunQuotaStore:
             self.records[key] = record
             self._save_records_locked()
             return self._status_from_record(record, now)
+
+
+class RedisRunQuotaStore(RunQuotaStore):
+    CONSUME_SCRIPT = """
+local key = KEYS[1]
+local window_ms = tonumber(ARGV[1]) * 1000
+local max_runs = tonumber(ARGV[2])
+local current = redis.call('GET', key)
+if not current then
+  redis.call('SET', key, 1, 'PX', window_ms, 'NX')
+  return {1, redis.call('PTTL', key), 0}
+end
+
+current = tonumber(current)
+local ttl = redis.call('PTTL', key)
+if ttl < 0 then
+  redis.call('PEXPIRE', key, window_ms)
+  ttl = redis.call('PTTL', key)
+end
+
+if current >= max_runs then
+  return {current, ttl, 1}
+end
+
+local used = redis.call('INCR', key)
+ttl = redis.call('PTTL', key)
+if ttl < 0 then
+  redis.call('PEXPIRE', key, window_ms)
+  ttl = redis.call('PTTL', key)
+end
+return {used, ttl, 0}
+""".strip()
+
+    def __init__(self, redis_url: str, *, max_runs: int, window_seconds: int, key_prefix: str) -> None:
+        if redis_lib is None:
+            raise RuntimeError("redis-py is required for Redis-backed run quotas. Add the 'redis' package to the image.")
+        self.path = RUN_QUOTA_STORE_PATH
+        self.max_runs = max_runs
+        self.window_seconds = window_seconds
+        self.lock = threading.Lock()
+        self.records: Dict[str, Dict[str, Any]] = {}
+        self.redis_url = redis_url
+        self.key_prefix = key_prefix.rstrip(":")
+        self.client = redis_lib.Redis.from_url(
+            redis_url,
+            decode_responses=True,
+            health_check_interval=30,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+        self.consume_script = self.client.register_script(self.CONSUME_SCRIPT)
+
+    def _key(self, client_ip: str) -> str:
+        return f"{self.key_prefix}:{self._hash_ip(client_ip)}"
+
+    def _record_from_usage(self, used: int, ttl_ms: int | None, now: float) -> Dict[str, Any] | None:
+        if used <= 0:
+            return None
+        ttl_ms = int(ttl_ms or 0)
+        if ttl_ms <= 0:
+            return {"used": used, "reset_at": now + self.window_seconds}
+        return {
+            "used": used,
+            "reset_at": now + ttl_ms / 1000.0,
+        }
+
+    def snapshot(self, client_ip: str) -> Dict[str, Any]:
+        now = time.time()
+        key = self._key(client_ip)
+        value, ttl_ms = self.client.pipeline().get(key).pttl(key).execute()
+        used = int(value or 0)
+        if used and int(ttl_ms or 0) < 0:
+            self.client.pexpire(key, self.window_seconds * 1000)
+            ttl_ms = self.client.pttl(key)
+        return self._status_from_record(self._record_from_usage(used, ttl_ms, now), now)
+
+    def consume(self, client_ip: str) -> Dict[str, Any]:
+        now = time.time()
+        key = self._key(client_ip)
+        used, ttl_ms, exhausted = self.consume_script(
+            keys=[key],
+            args=[self.window_seconds, self.max_runs],
+        )
+        status = self._status_from_record(self._record_from_usage(int(used or 0), int(ttl_ms or 0), now), now)
+        if int(exhausted or 0):
+            raise RunQuotaExceeded(status)
+        return status
+
+
+def build_run_quota_store() -> RunQuotaStore:
+    if RUN_QUOTA_REDIS_URL:
+        return RedisRunQuotaStore(
+            RUN_QUOTA_REDIS_URL,
+            max_runs=RUN_QUOTA_MAX_RUNS,
+            window_seconds=RUN_QUOTA_WINDOW_SECONDS,
+            key_prefix=RUN_QUOTA_REDIS_KEY_PREFIX,
+        )
+    return RunQuotaStore(
+        RUN_QUOTA_STORE_PATH,
+        max_runs=RUN_QUOTA_MAX_RUNS,
+        window_seconds=RUN_QUOTA_WINDOW_SECONDS,
+    )
 
 
 def extract_trusted_client_ip(raw_value: str, *, prefer_last: bool = False) -> str | None:
@@ -2705,11 +2816,7 @@ class DemoServer(ThreadingHTTPServer):
             self.examples_by_id
         )
         self.skill_corpora = build_skill_corpora(payload)
-        self.run_quota_store = RunQuotaStore(
-            RUN_QUOTA_STORE_PATH,
-            max_runs=RUN_QUOTA_MAX_RUNS,
-            window_seconds=RUN_QUOTA_WINDOW_SECONDS,
-        )
+        self.run_quota_store = build_run_quota_store()
         self.max_concurrent_runs = MAX_CONCURRENT_RUNS
         self.run_capacity = threading.BoundedSemaphore(MAX_CONCURRENT_RUNS)
         self.max_concurrent_retrievals = MAX_CONCURRENT_RETRIEVALS
@@ -2732,6 +2839,7 @@ class DemoServer(ThreadingHTTPServer):
         self.examples_payload["runQuotaConfig"] = {
             "limit": RUN_QUOTA_MAX_RUNS,
             "windowSeconds": RUN_QUOTA_WINDOW_SECONDS,
+            "backend": "redis" if RUN_QUOTA_REDIS_URL else "file",
         }
         self.examples_payload["runCapacityConfig"] = {
             "maxConcurrentRuns": MAX_CONCURRENT_RUNS,
@@ -2743,7 +2851,8 @@ def main() -> None:
     host = os.environ.get("TRS_DEMO_HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", os.environ.get("TRS_DEMO_PORT", "8080")))
     httpd = DemoServer((host, port), DemoHandler)
-    print(f"TRS demo listening on http://{host}:{port}", flush=True)
+    quota_backend = httpd.examples_payload.get("runQuotaConfig", {}).get("backend", "file")
+    print(f"TRS demo listening on http://{host}:{port} (run quota backend: {quota_backend})", flush=True)
     httpd.serve_forever()
 
 

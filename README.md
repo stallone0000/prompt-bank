@@ -11,6 +11,7 @@ This demo therefore uses:
 - a static frontend
 - a small Python backend
 - server-side environment variables for the API key
+- a per-IP run quota, backed by `Redis` / Render Key Value when available
 
 If you want a public URL, deploy the whole repository as a single Python service or Docker container on a platform such as `Render`, `Railway`, or `Fly.io`.
 
@@ -44,13 +45,19 @@ export TRS_DEMO_API_KEY="your-360-api-key"
 export TRS_DEMO_PROXY_URL="http://proxy.so.qihoo.net:8003"
 ```
 
-3. Start the demo:
+3. Optional, to store per-IP quotas in Redis instead of the local JSON fallback:
+
+```bash
+export TRS_DEMO_REDIS_URL="redis://red-xxxxxxxx:6379"
+```
+
+4. Start the demo:
 
 ```bash
 python app.py
 ```
 
-4. Open:
+5. Open:
 
 ```text
 http://localhost:8080
@@ -64,6 +71,10 @@ http://localhost:8080
   - default: `http://api.360.cn/v1/chat/completions`
 - `TRS_DEMO_PROXY_URL`
   - optional HTTP/HTTPS proxy
+- `TRS_DEMO_REDIS_URL`
+  - optional Redis / Render Key Value URL for persistent per-IP quotas
+- `TRS_DEMO_RUN_QUOTA_MAX_RUNS`
+  - default: `10`
 - `TRS_DEMO_TIMEOUT_SECONDS`
   - default: `300`
 - `TRS_DEMO_MAX_TOKENS`
@@ -97,6 +108,7 @@ docker run -p 8080:8080 -e TRS_DEMO_API_KEY="your-360-api-key" trs-demo
 - `render.yaml` is already included for Render Blueprint deploys
 - the included blueprint targets the `main` branch and defaults to Render's `free` plan
 - set `TRS_DEMO_API_KEY` in the platform dashboard
+- set `TRS_DEMO_REDIS_URL` if you want quotas to persist across redeploys
 - set `TRS_DEMO_PROXY_URL` only if the deployment environment actually needs it
 - if the platform needs a health check path, use `/api/health`
 - switch the plan to `starter` later if you want to avoid free-tier sleep / cold starts
@@ -112,8 +124,9 @@ docker run -p 8080:8080 -e TRS_DEMO_API_KEY="your-360-api-key" trs-demo
 3. In Render, choose `New +` -> `Blueprint`.
 4. Select this repo. Render will detect `render.yaml`.
 5. Set `TRS_DEMO_API_KEY` in the service environment.
-6. Add `TRS_DEMO_PROXY_URL` only if the deployed environment cannot reach `http://api.360.cn` directly.
-7. Click deploy. Render will return a public `https://...onrender.com` URL.
+6. Optionally provision a Render Key Value instance and set `TRS_DEMO_REDIS_URL` to its internal URL.
+7. Add `TRS_DEMO_PROXY_URL` only if the deployed environment cannot reach `http://api.360.cn` directly.
+8. Click deploy. Render will return a public `https://...onrender.com` URL.
 
 ## Data files
 
