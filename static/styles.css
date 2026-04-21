@@ -416,10 +416,7 @@ a {
   border: 1px solid rgba(31, 31, 31, 0.08);
   border-radius: 14px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 32%, rgba(90, 152, 255, 0.42), transparent 28%),
-    radial-gradient(circle at 50% 38%, rgba(41, 95, 183, 0.34), transparent 42%),
-    linear-gradient(180deg, #14233e 0%, #0b1527 56%, #050a14 100%);
+  background: #ffffff;
 }
 
 .clustrmaps-widget-shell {
@@ -428,6 +425,14 @@ a {
   justify-content: center;
   width: min(100%, 238px);
   min-height: 198px;
+}
+
+.clustrmaps-frame,
+.clustrmaps-widget-shell,
+.clustrmaps-widget-shell > a,
+.clustrmaps-widget-shell .clstrm_outer,
+.clustrmaps-widget-shell .clstrm_inner {
+  background: #ffffff !important;
 }
 
 .clustrmaps-widget-shell > a,

@@ -750,6 +750,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         output_price_yuan_per_million=27.0,
         supports_reasoning_trace=True,
         max_tokens=30000,
+        temperature_override=1.0,
     ),
     "gpt54": ModelConfig(
         model_id="gpt54",
