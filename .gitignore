@@ -5,3 +5,4 @@ __pycache__/
 .env.*
 !.env.example
 data/run_quota_store.json
+data/visitor_map_store.json

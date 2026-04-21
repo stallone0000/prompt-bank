@@ -102,6 +102,13 @@ a {
   line-height: 1.08;
 }
 
+.title-trs-letter {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.12em;
+}
+
 .topbar-subtitle {
   margin: 0;
   max-width: 760px;
@@ -394,6 +401,52 @@ a {
 
 .custom-input-panel {
   align-content: start;
+}
+
+.visitor-map-panel {
+  gap: 9px;
+}
+
+.visitor-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.visitor-map-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 9px;
+  border: 1px solid rgba(220, 38, 38, 0.14);
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.06);
+  color: #c22626;
+  font-size: 0.72rem;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.visitor-map-canvas {
+  height: 220px;
+  border: 1px solid rgba(31, 31, 31, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(16, 163, 127, 0.08), transparent 28%),
+    linear-gradient(180deg, #eef5ff 0%, #f7fafc 100%);
+}
+
+.visitor-map-canvas .leaflet-control-attribution {
+  font-size: 0.56rem;
+}
+
+.visitor-map-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.42;
 }
 
 .custom-meta,
@@ -1727,5 +1780,9 @@ a {
 
   .metrics-grid {
     grid-template-columns: 1fr;
+  }
+
+  .visitor-map-canvas {
+    height: 188px;
   }
 }

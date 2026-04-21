@@ -41,6 +41,9 @@ const state = {
   streamAbortController: null,
   userStopped: false,
   runQuota: null,
+  visitorMap: null,
+  visitorMapLeaflet: null,
+  visitorMapLayer: null,
 };
 
 const STREAM_CONNECT_MAX_RETRIES = 4;
@@ -84,6 +87,9 @@ const nodes = {
   skillCard: document.getElementById("skillCard"),
   runQuotaChip: document.getElementById("runQuotaChip"),
   runQuotaSummary: document.getElementById("runQuotaSummary"),
+  visitorMapCanvas: document.getElementById("visitorMapCanvas"),
+  visitorMapCount: document.getElementById("visitorMapCount"),
+  visitorMapStatus: document.getElementById("visitorMapStatus"),
   runStatus: document.getElementById("runStatus"),
   liveSummary: document.getElementById("liveSummary"),
   directMetrics: document.getElementById("directMetrics"),
@@ -291,6 +297,121 @@ function quotaLimitMessage() {
     return `Daily run limit reached for this IP. Try again in ${formatShortDuration(quota.resetInSeconds)}.`;
   }
   return "Daily run limit reached for this IP.";
+}
+
+function formatRelativeTime(timestampMs) {
+  if (!Number.isFinite(timestampMs) || !timestampMs) {
+    return "";
+  }
+  const deltaSeconds = Math.max(0, Math.round((Date.now() - timestampMs) / 1000));
+  if (deltaSeconds < 60) {
+    return "just now";
+  }
+  const minutes = Math.floor(deltaSeconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) {
+    return `${hours}h ago`;
+  }
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function applyVisitorMap(visitorMap) {
+  state.visitorMap = visitorMap && typeof visitorMap === "object" ? visitorMap : { markers: [], count: 0 };
+  renderVisitorMap();
+}
+
+function ensureVisitorMap() {
+  if (!nodes.visitorMapCanvas || !window.L) {
+    return null;
+  }
+  if (state.visitorMapLeaflet) {
+    return state.visitorMapLeaflet;
+  }
+
+  const map = window.L.map(nodes.visitorMapCanvas, {
+    zoomControl: false,
+    worldCopyJump: true,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    boxZoom: false,
+    keyboard: false,
+    attributionControl: true,
+  });
+  map.setView([18, 0], 1);
+  window.L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+    subdomains: "abcd",
+    minZoom: 1,
+    maxZoom: 5,
+    noWrap: true,
+    attribution: "&copy; OpenStreetMap &copy; CARTO",
+  }).addTo(map);
+  state.visitorMapLeaflet = map;
+  state.visitorMapLayer = window.L.layerGroup().addTo(map);
+  window.setTimeout(() => map.invalidateSize(), 60);
+  return map;
+}
+
+function renderVisitorMap() {
+  if (!nodes.visitorMapCanvas || !nodes.visitorMapCount || !nodes.visitorMapStatus) {
+    return;
+  }
+
+  const visitorMap = state.visitorMap || { markers: [], count: 0 };
+  const markers = Array.isArray(visitorMap.markers) ? visitorMap.markers : [];
+  nodes.visitorMapCount.textContent = `${markers.length} dots`;
+
+  if (!window.L) {
+    nodes.visitorMapStatus.textContent = "Map library is still loading.";
+    return;
+  }
+
+  const map = ensureVisitorMap();
+  if (!map || !state.visitorMapLayer) {
+    nodes.visitorMapStatus.textContent = "Unable to initialize the visitor map.";
+    return;
+  }
+
+  state.visitorMapLayer.clearLayers();
+  if (!markers.length) {
+    nodes.visitorMapStatus.textContent =
+      "The map will populate as public visitors arrive. Locations are approximate.";
+    map.setView([18, 0], 1);
+    return;
+  }
+
+  markers.forEach((marker) => {
+    if (!Number.isFinite(marker.lat) || !Number.isFinite(marker.lon)) {
+      return;
+    }
+    const popup = [
+      `<strong>${escapeHtml(marker.label || marker.country || "Visitor")}</strong>`,
+      marker.lastSeenAtMs ? `<span>${escapeHtml(formatRelativeTime(marker.lastSeenAtMs))}</span>` : "",
+      Number.isFinite(marker.visits) && marker.visits > 0 ? `<span>${marker.visits} visit${marker.visits === 1 ? "" : "s"}</span>` : "",
+    ]
+      .filter(Boolean)
+      .join("<br />");
+    window.L.circleMarker([marker.lat, marker.lon], {
+      radius: 4.8,
+      color: "#b91c1c",
+      weight: 1,
+      fillColor: "#ef4444",
+      fillOpacity: 0.88,
+    })
+      .bindTooltip(popup, {
+        direction: "top",
+        opacity: 0.96,
+      })
+      .addTo(state.visitorMapLayer);
+  });
+
+  nodes.visitorMapStatus.textContent =
+    "Approximate recent visitor origins based on IP geolocation. Red dots mark recent unique visitors.";
+  map.setView([18, 0], 1);
+  window.setTimeout(() => map.invalidateSize(), 60);
 }
 
 function typesetMath(targets = []) {
@@ -2064,6 +2185,7 @@ async function boot() {
   const response = await fetch("/api/examples");
   state.payload = await response.json();
   applyRunQuota(state.payload.runQuota);
+  applyVisitorMap(state.payload.visitorMap);
   state.exampleId =
     state.payload.exampleGroups?.[0]?.optionIds?.[0] || state.payload.examples?.[0]?.id || null;
   closeExampleGroups();
