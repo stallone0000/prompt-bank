@@ -10,12 +10,6 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@600;700&display=swap"
       rel="stylesheet"
     />
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
     <link rel="stylesheet" href="/styles.css" />
     <script>
       window.MathJax = {
@@ -117,15 +111,17 @@
             </p>
           </section>
 
-          <section class="sidebar-panel visitor-map-panel">
-            <div class="sidebar-head visitor-map-head">
+          <section class="sidebar-panel clustrmaps-panel">
+            <div class="sidebar-head">
               <h2>Visitor Map</h2>
-              <span id="visitorMapCount" class="visitor-map-count">-</span>
             </div>
-            <div id="visitorMapCanvas" class="visitor-map-canvas" aria-label="Approximate recent visitor origins"></div>
-            <p id="visitorMapStatus" class="visitor-map-status">
-              Approximate recent visitor origins based on IP geolocation.
-            </p>
+            <div class="clustrmaps-frame" aria-label="Global visitor map powered by ClustrMaps">
+              <script
+                type="text/javascript"
+                id="clstr_globe"
+                src="//clustrmaps.com/globe.js?d=8J6MqYYn_muve7hwNGHFXhPT1Hq8QTl7DTLt7nrZA2U"
+              ></script>
+            </div>
           </section>
         </aside>
 
@@ -246,11 +242,6 @@
       </main>
     </div>
 
-    <script
-      src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
     <script src="/app.js"></script>
   </body>
 </html>

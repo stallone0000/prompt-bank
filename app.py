@@ -22,7 +22,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Dict
 from urllib import error, request
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 
 try:
     import redis as redis_lib
@@ -47,25 +47,6 @@ RUN_QUOTA_REDIS_URL = (os.environ.get("TRS_DEMO_REDIS_URL") or os.environ.get("R
 RUN_QUOTA_REDIS_KEY_PREFIX = (
     os.environ.get("TRS_DEMO_REDIS_PREFIX", "trs-demo:run-quota").strip() or "trs-demo:run-quota"
 )
-VISITOR_MAP_STORE_PATH = APP_DIR / "data" / "visitor_map_store.json"
-VISITOR_MAP_REDIS_KEY_PREFIX = (
-    os.environ.get("TRS_DEMO_VISITOR_MAP_REDIS_PREFIX", "trs-demo:visitor-map").strip()
-    or "trs-demo:visitor-map"
-)
-VISITOR_GEO_API_URL_TEMPLATE = (
-    os.environ.get("TRS_DEMO_VISITOR_GEO_API_URL", "https://ipwho.is/{ip}").strip()
-    or "https://ipwho.is/{ip}"
-)
-VISITOR_GEO_FALLBACK_URL_TEMPLATE = (
-    os.environ.get(
-        "TRS_DEMO_VISITOR_GEO_FALLBACK_URL",
-        "http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city,lat,lon",
-    ).strip()
-    or "http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city,lat,lon"
-)
-VISITOR_MAP_MAX_POINTS = max(10, int(os.environ.get("TRS_DEMO_VISITOR_MAP_MAX_POINTS", "180")))
-VISITOR_MAP_RETENTION = max(VISITOR_MAP_MAX_POINTS, int(os.environ.get("TRS_DEMO_VISITOR_MAP_RETENTION", "1000")))
-VISITOR_GEO_TIMEOUT_SECONDS = max(1.0, float(os.environ.get("TRS_DEMO_VISITOR_GEO_TIMEOUT_SECONDS", "2.5")))
 MAX_REQUEST_BYTES = max(4096, int(os.environ.get("TRS_DEMO_MAX_REQUEST_BYTES", str(128 * 1024))))
 MAX_CUSTOM_QUESTION_CHARS = max(256, int(os.environ.get("TRS_DEMO_MAX_CUSTOM_QUESTION_CHARS", "16000")))
 MAX_REFERENCE_ANSWER_CHARS = max(32, int(os.environ.get("TRS_DEMO_MAX_REFERENCE_ANSWER_CHARS", "4000")))
@@ -527,287 +508,6 @@ def build_run_quota_store() -> RunQuotaStore:
         max_runs=RUN_QUOTA_MAX_RUNS,
         window_seconds=RUN_QUOTA_WINDOW_SECONDS,
     )
-
-
-def is_public_client_ip(client_ip: str) -> bool:
-    try:
-        ip_obj = ipaddress.ip_address(client_ip)
-    except ValueError:
-        return False
-    return ip_obj.is_global
-
-
-def build_geo_lookup_url(client_ip: str) -> str:
-    return VISITOR_GEO_API_URL_TEMPLATE.replace("{ip}", quote(client_ip, safe=""))
-
-
-def build_geo_fallback_lookup_url(client_ip: str) -> str:
-    return VISITOR_GEO_FALLBACK_URL_TEMPLATE.replace("{ip}", quote(client_ip, safe=""))
-
-
-def normalize_geo_payload(payload: Dict[str, Any], *, source: str) -> Dict[str, Any] | None:
-    if not isinstance(payload, dict):
-        return None
-
-    if source == "ipwho.is":
-        if payload.get("success") is False:
-            return None
-        latitude = payload.get("latitude")
-        longitude = payload.get("longitude")
-        country = (payload.get("country") or "").strip()
-        region = (payload.get("region") or "").strip()
-        city = (payload.get("city") or "").strip()
-        country_code = (payload.get("country_code") or payload.get("country_code2") or "").strip().upper()
-    else:
-        if str(payload.get("status") or "").lower() != "success":
-            return None
-        latitude = payload.get("lat")
-        longitude = payload.get("lon")
-        country = (payload.get("country") or "").strip()
-        region = (payload.get("regionName") or payload.get("region") or "").strip()
-        city = (payload.get("city") or "").strip()
-        country_code = (payload.get("countryCode") or "").strip().upper()
-
-    try:
-        latitude = float(latitude)
-        longitude = float(longitude)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(latitude) or not math.isfinite(longitude):
-        return None
-
-    return {
-        "lat": round(latitude, 4),
-        "lon": round(longitude, 4),
-        "country": country,
-        "region": region,
-        "city": city,
-        "countryCode": country_code,
-        "label": ", ".join(part for part in (city, region, country) if part) or country or "Unknown",
-        "source": source,
-    }
-
-
-def lookup_visitor_geo(client_ip: str) -> Dict[str, Any] | None:
-    if not is_public_client_ip(client_ip):
-        return None
-
-    providers = (
-        ("ipwho.is", build_geo_lookup_url(client_ip)),
-        ("ip-api.com", build_geo_fallback_lookup_url(client_ip)),
-    )
-    for source, url in providers:
-        try:
-            with request.urlopen(url, timeout=VISITOR_GEO_TIMEOUT_SECONDS) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except Exception:
-            continue
-        normalized = normalize_geo_payload(payload, source=source)
-        if normalized:
-            return normalized
-    return None
-
-
-def serialize_visitor_record(record: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "hash": record.get("hash") or "",
-        "lat": float(record.get("lat") or 0.0),
-        "lon": float(record.get("lon") or 0.0),
-        "country": record.get("country") or "",
-        "region": record.get("region") or "",
-        "city": record.get("city") or "",
-        "countryCode": record.get("countryCode") or "",
-        "label": record.get("label") or "",
-        "firstSeenAtMs": int(float(record.get("firstSeenAt") or 0) * 1000) if record.get("firstSeenAt") else None,
-        "lastSeenAtMs": int(float(record.get("lastSeenAt") or 0) * 1000) if record.get("lastSeenAt") else None,
-        "visits": int(record.get("visits") or 0),
-    }
-
-
-class VisitorMapStore:
-    def record_visit(self, client_ip: str) -> None:
-        raise NotImplementedError
-
-    def snapshot(self, *, limit: int = VISITOR_MAP_MAX_POINTS) -> Dict[str, Any]:
-        raise NotImplementedError
-
-
-class FileVisitorMapStore(VisitorMapStore):
-    def __init__(self, path: Path, *, retention: int) -> None:
-        self.path = path
-        self.retention = retention
-        self.lock = threading.Lock()
-        self.records = self._load_records()
-
-    def _load_records(self) -> Dict[str, Dict[str, Any]]:
-        if not self.path.exists():
-            return {}
-        try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return {}
-        records = payload.get("records") if isinstance(payload, dict) else {}
-        return records if isinstance(records, dict) else {}
-
-    def _save_locked(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "version": 1,
-            "records": self.records,
-        }
-        tmp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
-        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        tmp_path.replace(self.path)
-
-    def _prune_locked(self) -> None:
-        if len(self.records) <= self.retention:
-            return
-        ordered = sorted(
-            self.records.items(),
-            key=lambda item: float(item[1].get("lastSeenAt") or 0),
-            reverse=True,
-        )
-        self.records = dict(ordered[: self.retention])
-
-    def record_visit(self, client_ip: str) -> None:
-        hashed_ip = hash_client_ip(client_ip)
-        now = time.time()
-        with self.lock:
-            record = self.records.get(hashed_ip)
-            if record:
-                record["lastSeenAt"] = now
-                record["visits"] = int(record.get("visits") or 0) + 1
-                self.records[hashed_ip] = record
-                self._save_locked()
-                return
-
-        geo = lookup_visitor_geo(client_ip)
-        if not geo:
-            return
-
-        with self.lock:
-            record = self.records.get(hashed_ip)
-            if record:
-                record["lastSeenAt"] = now
-                record["visits"] = int(record.get("visits") or 0) + 1
-            else:
-                record = {
-                    "hash": hashed_ip,
-                    **geo,
-                    "firstSeenAt": now,
-                    "lastSeenAt": now,
-                    "visits": 1,
-                }
-            self.records[hashed_ip] = record
-            self._prune_locked()
-            self._save_locked()
-
-    def snapshot(self, *, limit: int = VISITOR_MAP_MAX_POINTS) -> Dict[str, Any]:
-        with self.lock:
-            ordered = sorted(
-                self.records.values(),
-                key=lambda record: float(record.get("lastSeenAt") or 0),
-                reverse=True,
-            )
-            markers = [serialize_visitor_record(record) for record in ordered[:limit]]
-        return {
-            "markers": markers,
-            "count": len(markers),
-            "source": "file",
-        }
-
-
-class RedisVisitorMapStore(VisitorMapStore):
-    def __init__(self, redis_url: str, *, key_prefix: str, retention: int) -> None:
-        if redis_lib is None:
-            raise RuntimeError("redis-py is required for Redis-backed visitor maps.")
-        self.key_prefix = key_prefix.rstrip(":")
-        self.retention = retention
-        self.client = redis_lib.Redis.from_url(
-            redis_url,
-            decode_responses=True,
-            health_check_interval=30,
-            socket_connect_timeout=2,
-            socket_timeout=2,
-        )
-
-    def _record_key(self, hashed_ip: str) -> str:
-        return f"{self.key_prefix}:record:{hashed_ip}"
-
-    def _index_key(self) -> str:
-        return f"{self.key_prefix}:index"
-
-    def _trim(self) -> None:
-        overflow = self.client.zcard(self._index_key()) - self.retention
-        if overflow <= 0:
-            return
-        stale_hashes = self.client.zrange(self._index_key(), 0, overflow - 1)
-        if not stale_hashes:
-            return
-        pipe = self.client.pipeline()
-        pipe.zrem(self._index_key(), *stale_hashes)
-        for hashed_ip in stale_hashes:
-            pipe.delete(self._record_key(hashed_ip))
-        pipe.execute()
-
-    def record_visit(self, client_ip: str) -> None:
-        hashed_ip = hash_client_ip(client_ip)
-        now = time.time()
-        record_key = self._record_key(hashed_ip)
-        if self.client.exists(record_key):
-            pipe = self.client.pipeline()
-            pipe.hset(record_key, mapping={"lastSeenAt": now})
-            pipe.hincrby(record_key, "visits", 1)
-            pipe.zadd(self._index_key(), {hashed_ip: now})
-            pipe.execute()
-            return
-
-        geo = lookup_visitor_geo(client_ip)
-        if not geo:
-            return
-
-        pipe = self.client.pipeline()
-        pipe.hset(
-            record_key,
-            mapping={
-                "hash": hashed_ip,
-                **geo,
-                "firstSeenAt": now,
-                "lastSeenAt": now,
-                "visits": 1,
-            },
-        )
-        pipe.zadd(self._index_key(), {hashed_ip: now})
-        pipe.execute()
-        self._trim()
-
-    def snapshot(self, *, limit: int = VISITOR_MAP_MAX_POINTS) -> Dict[str, Any]:
-        hashed_ips = self.client.zrevrange(self._index_key(), 0, max(0, limit - 1))
-        if not hashed_ips:
-            return {
-                "markers": [],
-                "count": 0,
-                "source": "redis",
-            }
-        pipe = self.client.pipeline()
-        for hashed_ip in hashed_ips:
-            pipe.hgetall(self._record_key(hashed_ip))
-        records = [record for record in pipe.execute() if record]
-        return {
-            "markers": [serialize_visitor_record(record) for record in records],
-            "count": len(records),
-            "source": "redis",
-        }
-
-
-def build_visitor_map_store() -> VisitorMapStore:
-    if RUN_QUOTA_REDIS_URL:
-        return RedisVisitorMapStore(
-            RUN_QUOTA_REDIS_URL,
-            key_prefix=VISITOR_MAP_REDIS_KEY_PREFIX,
-            retention=VISITOR_MAP_RETENTION,
-        )
-    return FileVisitorMapStore(VISITOR_MAP_STORE_PATH, retention=VISITOR_MAP_RETENTION)
 
 
 def extract_trusted_client_ip(raw_value: str, *, prefer_last: bool = False) -> str | None:
@@ -2816,16 +2516,6 @@ class DemoHandler(SimpleHTTPRequestHandler):
     def _run_quota_payload(self) -> Dict[str, Any]:
         return self.server.run_quota_store.snapshot(self._client_ip())
 
-    def _visitor_map_payload(self) -> Dict[str, Any]:
-        try:
-            return self.server.visitor_map_store.snapshot(limit=VISITOR_MAP_MAX_POINTS)
-        except Exception:
-            return {
-                "markers": [],
-                "count": 0,
-                "source": "unavailable",
-            }
-
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
@@ -2833,15 +2523,9 @@ class DemoHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/examples":
-            client_ip = self._client_ip()
-            try:
-                self.server.visitor_map_store.record_visit(client_ip)
-            except Exception:
-                pass
             payload = {
                 **self.server.examples_payload,
                 "runQuota": self._run_quota_payload(),
-                "visitorMap": self._visitor_map_payload(),
             }
             self._send_json(payload)
             return
@@ -3137,7 +2821,6 @@ class DemoServer(ThreadingHTTPServer):
         )
         self.skill_corpora = build_skill_corpora(payload)
         self.run_quota_store = build_run_quota_store()
-        self.visitor_map_store = build_visitor_map_store()
         self.max_concurrent_runs = MAX_CONCURRENT_RUNS
         self.run_capacity = threading.BoundedSemaphore(MAX_CONCURRENT_RUNS)
         self.max_concurrent_retrievals = MAX_CONCURRENT_RETRIEVALS
@@ -3161,11 +2844,6 @@ class DemoServer(ThreadingHTTPServer):
             "limit": RUN_QUOTA_MAX_RUNS,
             "windowSeconds": RUN_QUOTA_WINDOW_SECONDS,
             "backend": "redis" if RUN_QUOTA_REDIS_URL else "file",
-        }
-        self.examples_payload["visitorMapConfig"] = {
-            "maxPoints": VISITOR_MAP_MAX_POINTS,
-            "backend": "redis" if RUN_QUOTA_REDIS_URL else "file",
-            "geoSource": "ipwho.is",
         }
         self.examples_payload["runCapacityConfig"] = {
             "maxConcurrentRuns": MAX_CONCURRENT_RUNS,
