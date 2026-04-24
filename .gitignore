@@ -6,3 +6,4 @@ __pycache__/
 !.env.example
 data/run_quota_store.json
 data/visitor_map_store.json
+AGENT_HANDOFF.local.md

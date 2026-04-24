@@ -62,7 +62,6 @@ const nodes = {
   customCorpusMeta: document.getElementById("customCorpusMeta"),
   customStatus: document.getElementById("customStatus"),
   skillDatasetControls: document.getElementById("skillDatasetControls"),
-  skillDatasetSummary: document.getElementById("skillDatasetSummary"),
   exampleList: document.getElementById("exampleList"),
   modelCount: document.getElementById("modelCount"),
   currentModelMenu: document.getElementById("currentModelMenu"),
@@ -740,17 +739,14 @@ function initializeSkillDatasetSelection() {
 
 function updateSkillDatasetMeta() {
   const selected = selectedSkillDatasets();
-  const total = skillDatasetOptions().length;
   if (!selected.length) {
     nodes.customCorpusMeta.textContent = "Select at least one skill dataset.";
-    nodes.skillDatasetSummary.textContent = total ? `0/${total}` : "0/0";
     return;
   }
 
   const totalDocCount = selected.reduce((sum, option) => sum + (option.docCount || 0), 0);
   const label = selected.map((option) => option.label).join(" + ");
   nodes.customCorpusMeta.textContent = `Live retrieval over ${formatNumber(totalDocCount)} skill cards from ${label}.`;
-  nodes.skillDatasetSummary.textContent = `${selected.length}/${total}`;
 }
 
 function renderSkillDatasetControls() {

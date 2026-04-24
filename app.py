@@ -896,6 +896,32 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         supports_reasoning_trace=True,
         extra_body={"thinking": {"type": "enabled"}},
     ),
+    "deepseek4flash": ModelConfig(
+        model_id="deepseek4flash",
+        company="DeepSeek",
+        provider="DeepSeek",
+        family="DeepSeek",
+        label="DeepSeek V4 Flash",
+        api_model="deepseek/deepseek-v4-flash",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=0.2,
+        output_price_yuan_per_million=2.0,
+        supports_reasoning_trace=True,
+        extra_body={"thinking": {"type": "enabled"}},
+    ),
+    "deepseek4pro": ModelConfig(
+        model_id="deepseek4pro",
+        company="DeepSeek",
+        provider="DeepSeek",
+        family="DeepSeek",
+        label="DeepSeek V4 Pro",
+        api_model="deepseek/deepseek-v4-pro",
+        prompt_template=PROMPT_SHORT,
+        input_price_yuan_per_million=12.0,
+        output_price_yuan_per_million=24.0,
+        supports_reasoning_trace=True,
+        extra_body={"thinking": {"type": "enabled"}},
+    ),
 }
 
 VERIFIER_MODEL_OPTIONS: Dict[str, Dict[str, str]] = {
