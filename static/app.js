@@ -104,6 +104,7 @@ const FAMILY_ORDER = [
   "minimax",
   "deepseek",
   "kimi",
+  "mimo",
 ];
 
 const FAMILY_META = {
@@ -156,6 +157,11 @@ const FAMILY_META = {
     label: "Kimi",
     short: "KM",
     icon: "/icon/kimi.svg",
+  },
+  mimo: {
+    label: "Mimo",
+    short: "MI",
+    icon: "/icon/xiaomimimo.svg",
   },
 };
 
@@ -545,6 +551,9 @@ function inferFamilyId(modelId, model) {
   if (family === "kimi") {
     return "kimi";
   }
+  if (family === "mimo") {
+    return "mimo";
+  }
   if (family === "gpt") {
     return "gpt";
   }
@@ -578,6 +587,9 @@ function inferFamilyId(modelId, model) {
   }
   if (haystack.includes("kimi")) {
     return "kimi";
+  }
+  if (haystack.includes("mimo") || haystack.includes("xiaomi")) {
+    return "mimo";
   }
   if (haystack.includes("gpt-5") || haystack.includes("/gpt") || haystack.includes("openai")) {
     return "gpt";
