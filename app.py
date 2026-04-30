@@ -930,8 +930,8 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         label="Mimo 2.5 Pro",
         api_model="openrouter/xiaomi/mimo-v2.5-pro",
         prompt_template=PROMPT_SHORT,
-        input_price_yuan_per_million=4.0,
-        output_price_yuan_per_million=16.0,
+        input_price_yuan_per_million=7.0,
+        output_price_yuan_per_million=21.0,
         supports_reasoning_trace=False,
     ),
     "mimo25": ModelConfig(
@@ -942,8 +942,8 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         label="Mimo 2.5",
         api_model="openrouter/xiaomi/mimo-v2.5",
         prompt_template=PROMPT_SHORT,
-        input_price_yuan_per_million=1.0,
-        output_price_yuan_per_million=4.0,
+        input_price_yuan_per_million=2.8,
+        output_price_yuan_per_million=14.0,
         supports_reasoning_trace=False,
     ),
 }
